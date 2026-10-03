@@ -1,9 +1,9 @@
 .{
     .name = .zig_vin,
     .description = "A template library like jinja for zig.",
-    .version = "0.0.1",
+    .version = "0.0.2",
     .fingerprint = 0xcba32739c34472e,
-    .minimum_zig_version = "0.17.0-dev.2338+b46a7f3a2",
+    .minimum_zig_version = "0.17.0",
     .paths = .{
         "build.zig",
         "build.zig.zon",

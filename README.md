@@ -5,7 +5,7 @@ A template library like jinja for zig.
 
 ### Env
 
- - Zig >= 0.17.0-dev-20260929
+ - Zig >= 0.17.0
 
 
 ### Adding zig-vin as a dependency
