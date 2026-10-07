@@ -1,31 +1,34 @@
 const std = @import("std");
+const Writer = std.Io.Writer;
+const Allocator = std.mem.Allocator;
 
 const lexer = @import("lexer.zig");
 const parser = @import("parser.zig");
 const ast = @import("ast.zig");
-const value_mod = @import("value.zig");
 const loader_mod = @import("loader.zig");
 const render_mod = @import("render.zig");
 const filters_mod = @import("filters.zig");
 
-pub const Value = value_mod.Value;
-pub const Str = value_mod.Str;
-pub const Pair = value_mod.Pair;
-pub const Map = value_mod.Map;
-pub const Namespace = value_mod.Namespace;
-pub const Undefined = value_mod.Undefined;
+pub const value = @import("value.zig");
+
+pub const Value = value.Value;
+pub const Str = value.Str;
+pub const Pair = value.Pair;
+pub const Map = value.Map;
+pub const Namespace = value.Namespace;
+pub const Undefined = value.Undefined;
 
 // first code from https://github.com/zaxified/zig-libs
 
 /// Build a `Value` from ordinary Zig data — structs become ordered maps in
 /// field order, `[]const u8` becomes a string, slices become lists.
-pub const valueFrom = value_mod.from;
+pub const valueFrom = value.from;
 /// Adapter for `std.json.Value`. See SPEC.md §2 for why this, and not a
 /// dependency on the `yaml` module, is the shipped adapter.
-pub const valueFromJson = value_mod.fromJson;
+pub const valueFromJson = value.fromJson;
 /// markupsafe's escape set, exposed because callers registering their own
 /// filters need exactly it.
-pub const escapeAlloc = value_mod.escapeAlloc;
+pub const escapeAlloc = value.escapeAlloc;
 
 pub const Diagnostic = @import("diag.zig").Diagnostic;
 
@@ -92,14 +95,16 @@ pub const FilterKwarg = filters_mod.Kwarg;
 /// template resolves every filter and test name against this environment, so
 /// an environment must outlive the templates compiled from it.
 pub const Environment = struct {
-    gpa: std.mem.Allocator,
+    gpa: Allocator,
     options: Options,
     filters: std.StringHashMapUnmanaged(FilterFn) = .empty,
     tests: std.StringHashMapUnmanaged(TestFn) = .empty,
     /// Optional; without one, any composition tag is `error.NoLoader`.
     loader: ?Loader = null,
 
-    pub fn init(gpa: std.mem.Allocator, options: Options) error{OutOfMemory}!Environment {
+    const Self = @This();
+
+    pub fn init(gpa: Allocator, options: Options) error{OutOfMemory}!Environment {
         return initWithLoader(gpa, options, null);
     }
 
@@ -107,7 +112,7 @@ pub const Environment = struct {
     /// `{% import %}` will use. The loader is borrowed and must outlive the
     /// environment.
     pub fn initWithLoader(
-        gpa: std.mem.Allocator,
+        gpa: Allocator,
         options: Options,
         template_loader: ?Loader,
     ) error{OutOfMemory}!Environment {
@@ -164,13 +169,45 @@ pub const Environment = struct {
     /// Compile and render in one step, for the one-shot case.
     pub fn renderAlloc(
         self: *const Environment,
-        gpa: std.mem.Allocator,
+        gpa: Allocator,
         source: []const u8,
         context: Value,
         diag: ?*Diagnostic,
     ) Error![]u8 {
         var tmpl = try self.compile(source, diag);
         defer tmpl.deinit();
+        return tmpl.render(gpa, context, diag);
+    }
+
+    pub fn renderTemplate(
+        self: *const Self,
+        gpa: Allocator,
+        tpl: []const u8,
+        diag: ?*Diagnostic,
+    ) !Template {
+        if (self.loader) |loader| {
+            const source = try loader.load(loader.ctx, gpa, tpl);
+            if (source) |val| {
+                defer gpa.free(val);
+
+                const tmpl = try self.compile(val, diag);
+                return tmpl;
+            }
+        }
+
+        return error.LoaderInvalid;
+    }
+
+    pub fn renderTemplateAlloc(
+        self: *const Self,
+        gpa: Allocator,
+        tpl: []const u8,
+        context: Value,
+        diag: ?*Diagnostic,
+    ) ![]u8 {
+        var tmpl = try self.renderTemplate(gpa, tpl, diag);
+        defer tmpl.deinit();
+
         return tmpl.render(gpa, context, diag);
     }
 
@@ -200,7 +237,7 @@ pub const Environment = struct {
     /// as a top-level one, just later, because it is only compiled when reached.
     fn compileInto(
         ctx: *const anyopaque,
-        arena: std.mem.Allocator,
+        arena: Allocator,
         source: []const u8,
         diag: *Diagnostic,
     ) parser.Error!ast.Parsed {
@@ -235,11 +272,11 @@ pub const Template = struct {
     /// Render to a freshly allocated buffer owned by the caller.
     pub fn render(
         self: *const Template,
-        gpa: std.mem.Allocator,
+        gpa: Allocator,
         context: Value,
         diag: ?*Diagnostic,
     ) RenderError![]u8 {
-        var aw: std.Io.Writer.Allocating = .init(gpa);
+        var aw: Writer.Allocating = .init(gpa);
         errdefer aw.deinit();
         try self.renderTo(gpa, &aw.writer, context, diag);
         return aw.toOwnedSlice() catch error.OutOfMemory;
@@ -249,8 +286,8 @@ pub const Template = struct {
     /// this returns, so intermediate values never outlive the call.
     pub fn renderTo(
         self: *const Template,
-        gpa: std.mem.Allocator,
-        out: *std.Io.Writer,
+        gpa: Allocator,
+        out: *Writer,
         context: Value,
         diag: ?*Diagnostic,
     ) RenderError!void {
@@ -293,11 +330,11 @@ pub const Template = struct {
 /// `alloc`/`remap` grow the total; the arena never really frees, so neither
 /// does this.
 const RenderBudget = struct {
-    parent: std.mem.Allocator,
+    parent: Allocator,
     remaining: usize,
     exhausted: bool = false,
 
-    fn allocator(self: *RenderBudget) std.mem.Allocator {
+    fn allocator(self: *RenderBudget) Allocator {
         return .{ .ptr = self, .vtable = &.{
             .alloc = alloc,
             .resize = resize,
@@ -341,7 +378,7 @@ const RenderBudget = struct {
 
 /// The one-liner: default options, compile and render, caller owns the result.
 pub fn renderAlloc(
-    gpa: std.mem.Allocator,
+    gpa: Allocator,
     source: []const u8,
     context: Value,
     options: Options,
@@ -365,4 +402,5 @@ test {
     _ = @import("reference_test.zig");
     _ = @import("loader.zig");
     _ = @import("loader_test.zig");
+    _ = @import("vin_test.zig");
 }

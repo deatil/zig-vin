@@ -1,6 +1,8 @@
 const std = @import("std");
-const value = @import("value.zig");
+const Writer = std.Io.Writer;
+const Allocator = std.mem.Allocator;
 
+const value = @import("value.zig");
 const Value = value.Value;
 
 pub const Error = value.Error;
@@ -28,7 +30,7 @@ pub const Args = struct {
 };
 
 pub const Ctx = struct {
-    arena: std.mem.Allocator,
+    arena: Allocator,
     autoescape: bool,
     strict: bool,
     user: *const anyopaque,
@@ -177,7 +179,7 @@ fn fTitle(ctx: *Ctx, input: Value, args: Args) Error!Value {
         c.* = if (transition) std.ascii.toUpper(c.*) else std.ascii.toLower(c.*);
         prev_boundary = boundary;
     }
-    return Value.str(out);
+    return Value.fromString(out);
 }
 
 fn titleMethod(ctx: *Ctx, input: Value) Error!Value {
@@ -320,7 +322,7 @@ fn fTruncate(ctx: *Ctx, input: Value, args: Args) Error!Value {
     const s = try ctx.toStr(input);
     const length_i = try intArg(args.get(0, "length") orelse Value{ .integer = 255 }, 255);
     const killwords = boolArg(args, 1, "killwords", false);
-    const end_v = args.get(2, "end") orelse Value.str("...");
+    const end_v = args.get(2, "end") orelse Value.fromString("...");
     const end_raw = try ctx.toStr(end_v);
     const leeway_i = try intArg(args.get(3, "leeway") orelse Value{ .integer = 5 }, 5);
 
@@ -378,10 +380,10 @@ fn fStriptags(ctx: *Ctx, input: Value, args: Args) Error!Value {
         try out.appendSlice(ctx.arena, w);
         first = false;
     }
-    return Value.str(out.items);
+    return Value.fromString(out.items);
 }
 
-fn unescapeEntities(arena: std.mem.Allocator, s: []const u8) Error![]const u8 {
+fn unescapeEntities(arena: Allocator, s: []const u8) Error![]const u8 {
     var out: std.ArrayList(u8) = .empty;
     var i: usize = 0;
     while (i < s.len) {
@@ -433,7 +435,7 @@ fn fString(ctx: *Ctx, input: Value, args: Args) Error!Value {
     _ = args;
     if (input == .string) return input;
     const s = try ctx.toStr(input);
-    return Value.str(s);
+    return Value.fromString(s);
 }
 
 fn fUrlencode(ctx: *Ctx, input: Value, args: Args) Error!Value {
@@ -452,7 +454,7 @@ fn fUrlencode(ctx: *Ctx, input: Value, args: Args) Error!Value {
                 try out.append(ctx.arena, '=');
                 try quoteIntoQs(ctx, &out, try ctx.toStr(p.value), "", true);
             }
-            return Value.str(out.items);
+            return Value.fromString(out.items);
         },
         .list, .tuple => |items| {
             if (items.len != 0 and allPairs(items)) {
@@ -467,18 +469,18 @@ fn fUrlencode(ctx: *Ctx, input: Value, args: Args) Error!Value {
                     try out.append(ctx.arena, '=');
                     try quoteIntoQs(ctx, &out, try ctx.toStr(kv[1]), "", true);
                 }
-                return Value.str(out.items);
+                return Value.fromString(out.items);
             }
             const s = try ctx.toStr(input);
             var out: std.ArrayList(u8) = .empty;
             try quoteInto(ctx, &out, s, "/");
-            return Value.str(out.items);
+            return Value.fromString(out.items);
         },
         else => {
             const s = try ctx.toStr(input);
             var out: std.ArrayList(u8) = .empty;
             try quoteInto(ctx, &out, s, "/");
-            return Value.str(out.items);
+            return Value.fromString(out.items);
         },
     }
 }
@@ -538,11 +540,11 @@ fn fXmlattr(ctx: *Ctx, input: Value, args: Args) Error!Value {
         first = false;
         const key = try ctx.toStr(p.key);
         if (invalidAttrKey(key)) return error.BadArgument;
-        var aw: std.Io.Writer.Allocating = .init(ctx.arena);
+        var aw: Writer.Allocating = .init(ctx.arena);
         try value.escapeTo(&aw.writer, key);
         try out.appendSlice(ctx.arena, aw.written());
         try out.appendSlice(ctx.arena, "=\"");
-        var vw: std.Io.Writer.Allocating = .init(ctx.arena);
+        var vw: Writer.Allocating = .init(ctx.arena);
         try value.escapeTo(&vw.writer, try ctx.toStr(p.value));
         try out.appendSlice(ctx.arena, vw.written());
         try out.append(ctx.arena, '"');
@@ -848,7 +850,7 @@ fn fJoin(ctx: *Ctx, input: Value, args: Args) Error!Value {
             if (i != 0) try out.appendSlice(ctx.arena, sep);
             try out.appendSlice(ctx.arena, try ctx.toStr(p));
         }
-        return Value.str(out.items);
+        return Value.fromString(out.items);
     }
     // Autoescaping: every non-markup part is escaped and the result is markup.
     var out: std.ArrayList(u8) = .empty;
@@ -1022,7 +1024,7 @@ fn fUnique(ctx: *Ctx, input: Value, args: Args) Error!Value {
         if (!case_sensitive and key == .string) {
             const low = try ctx.arena.dupe(u8, key.string.bytes);
             for (low) |*c| c.* = std.ascii.toLower(c.*);
-            key = Value.str(low);
+            key = Value.fromString(low);
         }
         var dup = false;
         for (seen.items) |s| if (value.valueEql(s, key)) {
@@ -1158,7 +1160,7 @@ fn fTojson(ctx: *Ctx, input: Value, args: Args) Error!Value {
         if (n > value.max_alloc) return error.OutOfRange;
         break :blk if (n < 0) 0 else @as(usize, @intCast(n));
     };
-    var aw: std.Io.Writer.Allocating = .init(ctx.arena);
+    var aw: Writer.Allocating = .init(ctx.arena);
     try jsonWrite(ctx, &aw.writer, input, indent, 0);
     var out: std.ArrayList(u8) = .empty;
     for (aw.written()) |c| switch (c) {
@@ -1171,7 +1173,7 @@ fn fTojson(ctx: *Ctx, input: Value, args: Args) Error!Value {
     return .{ .string = .{ .bytes = out.items, .safe = true } };
 }
 
-fn jsonWrite(ctx: *Ctx, w: *std.Io.Writer, v: Value, indent: ?usize, depth: usize) Error!void {
+fn jsonWrite(ctx: *Ctx, w: *Writer, v: Value, indent: ?usize, depth: usize) Error!void {
     if (depth > value.max_value_depth) return error.OutOfRange;
     switch (v) {
         .undef => return error.UndefinedValue,
@@ -1223,7 +1225,7 @@ fn jsonWrite(ctx: *Ctx, w: *std.Io.Writer, v: Value, indent: ?usize, depth: usiz
     }
 }
 
-fn jsonSep(w: *std.Io.Writer, indent: ?usize, depth: usize, comma: bool) Error!void {
+fn jsonSep(w: *Writer, indent: ?usize, depth: usize, comma: bool) Error!void {
     if (indent) |n| {
         w.writeAll("\n") catch return error.OutOfMemory;
         w.splatByteAll(' ', n * depth) catch return error.OutOfMemory;
@@ -1232,7 +1234,7 @@ fn jsonSep(w: *std.Io.Writer, indent: ?usize, depth: usize, comma: bool) Error!v
     }
 }
 
-fn jsonString(w: *std.Io.Writer, s: []const u8) Error!void {
+fn jsonString(w: *Writer, s: []const u8) Error!void {
     w.writeAll("\"") catch return error.OutOfMemory;
     var i: usize = 0;
     while (i < s.len) {
@@ -1493,7 +1495,7 @@ pub const builtin_tests = [_]TestEntry{
 /// `error.Unsupported` means "no such method on this type", which the renderer
 /// turns into a message naming both.
 pub fn callMethod(
-    arena: std.mem.Allocator,
+    arena: Allocator,
     obj: Value,
     name: []const u8,
     args: Args,

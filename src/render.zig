@@ -1,4 +1,7 @@
 const std = @import("std");
+const Writer = std.Io.Writer;
+const Allocator = std.mem.Allocator;
+
 const ast = @import("ast.zig");
 const value = @import("value.zig");
 const filters = @import("filters.zig");
@@ -84,7 +87,7 @@ pub const Lookup = struct {
     /// environment so this file never has to know about filter registries.
     compile: *const fn (
         ctx: *const anyopaque,
-        arena: std.mem.Allocator,
+        arena: Allocator,
         source: []const u8,
         diag: *Diagnostic,
     ) parser.Error!ast.Parsed,
@@ -135,12 +138,12 @@ const BlockFrame = struct {
 };
 
 pub fn render(
-    arena: std.mem.Allocator,
+    arena: Allocator,
     parsed: ast.Parsed,
     context: Value,
     opts: Options,
     lookup: Lookup,
-    out: *std.Io.Writer,
+    out: *Writer,
     diag: *Diagnostic,
 ) Error!void {
     var counting: Counting = .{ .inner = out, .limit = opts.max_output_bytes };
@@ -162,7 +165,7 @@ pub fn render(
 /// renderer only ever appends whole slices, so a two-method shim is enough and
 /// avoids a vtable in the hot path.
 const Counting = struct {
-    inner: *std.Io.Writer,
+    inner: *Writer,
     limit: usize,
     written: usize = 0,
 
@@ -174,7 +177,7 @@ const Counting = struct {
 };
 
 const Renderer = struct {
-    arena: std.mem.Allocator,
+    arena: Allocator,
     opts: Options,
     lookup: Lookup,
     out: *Counting,
@@ -291,7 +294,7 @@ const Renderer = struct {
                 try self.assign(s.target, v, 0);
             },
             .set_block => |s| {
-                var aw: std.Io.Writer.Allocating = .init(self.arena);
+                var aw: Writer.Allocating = .init(self.arena);
                 var sub: Counting = .{ .inner = &aw.writer, .limit = self.out.limit };
                 const saved = self.out;
                 self.out = &sub;
@@ -305,7 +308,7 @@ const Renderer = struct {
                 try self.assign(s.target, v, 0);
             },
             .filter_block => |fb| {
-                var aw: std.Io.Writer.Allocating = .init(self.arena);
+                var aw: Writer.Allocating = .init(self.arena);
                 var sub: Counting = .{ .inner = &aw.writer, .limit = self.out.limit };
                 const saved = self.out;
                 self.out = &sub;
@@ -509,7 +512,7 @@ const Renderer = struct {
         const found = self.resolveBlock(top.name, top.chain_index + 1) orelse
             return self.fail(line, "super() in block '{s}' has no parent definition", .{top.name}, error.BlockError);
 
-        var aw: std.Io.Writer.Allocating = .init(self.arena);
+        var aw: Writer.Allocating = .init(self.arena);
         var sub: Counting = .{ .inner = &aw.writer, .limit = self.out.limit, .written = self.out.written };
         const saved = self.out;
         self.out = &sub;
@@ -631,7 +634,7 @@ const Renderer = struct {
         self.self_ns = null;
         const saved_frames = self.swapFrames(frames);
 
-        var aw: std.Io.Writer.Allocating = .init(self.arena);
+        var aw: Writer.Allocating = .init(self.arena);
         var sink: Counting = .{ .inner = &aw.writer, .limit = self.out.limit };
         const saved_out = self.out;
         self.out = &sink;
@@ -705,7 +708,7 @@ const Renderer = struct {
         if (impl.block_body == null) try self.bindMacroArgs(def, params_frame, args, ref.name, line);
         if (supplied_caller) |c| try params_frame.put(self.arena, "caller", c);
 
-        var aw: std.Io.Writer.Allocating = .init(self.arena);
+        var aw: Writer.Allocating = .init(self.arena);
         var sink: Counting = .{ .inner = &aw.writer, .limit = self.out.limit, .written = self.out.written };
         const saved_out = self.out;
         self.out = &sink;
@@ -760,7 +763,7 @@ const Renderer = struct {
         var extra: std.ArrayList(value.Pair) = .empty;
         for (args.kw, 0..) |k, ki| {
             if (used_kw[ki]) continue;
-            try extra.append(self.arena, .{ .key = Value.str(k.name), .value = k.value });
+            try extra.append(self.arena, .{ .key = Value.fromString(k.name), .value = k.value });
         }
         if (extra.items.len != 0 and !def.catch_kwargs)
             return self.fail(line, "macro '{s}' got an unexpected keyword argument '{s}'", .{ name, extra.items[0].key.string.bytes }, error.BadCall);
@@ -841,7 +844,7 @@ const Renderer = struct {
 
         const items = try value.iterate(self.arena, args.pos[0]);
 
-        var aw: std.Io.Writer.Allocating = .init(self.arena);
+        var aw: Writer.Allocating = .init(self.arena);
         var sink: Counting = .{ .inner = &aw.writer, .limit = self.out.limit, .written = self.out.written };
         const saved_out = self.out;
         self.out = &sink;
@@ -894,13 +897,13 @@ const Renderer = struct {
             // through, the same short-circuit `value.strAlloc` already takes,
             // instead of copying it into a throwaway arena buffer first.
             if (v == .string) return self.out.writeAll(v.string.bytes);
-            var aw: std.Io.Writer.Allocating = .init(self.arena);
+            var aw: Writer.Allocating = .init(self.arena);
             try value.strTo(&aw.writer, v);
             return self.out.writeAll(aw.written());
         }
-        var raw: std.Io.Writer.Allocating = .init(self.arena);
+        var raw: Writer.Allocating = .init(self.arena);
         try value.strTo(&raw.writer, v);
-        var esc: std.Io.Writer.Allocating = .init(self.arena);
+        var esc: Writer.Allocating = .init(self.arena);
         try value.escapeTo(&esc.writer, raw.written());
         try self.out.writeAll(esc.written());
     }
@@ -1146,7 +1149,7 @@ const Renderer = struct {
     fn globalDict(self: *Renderer, args: filters.Args) Error!Value {
         if (args.pos.len != 0) return error.BadArgument;
         const pairs = try self.arena.alloc(value.Pair, args.kw.len);
-        for (args.kw, 0..) |k, i| pairs[i] = .{ .key = Value.str(k.name), .value = k.value };
+        for (args.kw, 0..) |k, i| pairs[i] = .{ .key = Value.fromString(k.name), .value = k.value };
         return .{ .map = .{ .pairs = pairs } };
     }
 
@@ -1182,10 +1185,10 @@ const Renderer = struct {
 
     fn macroAttr(self: *Renderer, m: value.MacroRef, name: []const u8) Error!Value {
         const impl: *const MacroImpl = @ptrCast(@alignCast(m.impl));
-        if (std.mem.eql(u8, name, "name")) return Value.str(m.name);
+        if (std.mem.eql(u8, name, "name")) return Value.fromString(m.name);
         if (std.mem.eql(u8, name, "arguments")) {
             const out = try self.arena.alloc(Value, impl.def.params.len);
-            for (impl.def.params, 0..) |p, i| out[i] = Value.str(p.name);
+            for (impl.def.params, 0..) |p, i| out[i] = Value.fromString(p.name);
             return .{ .tuple = out };
         }
         if (std.mem.eql(u8, name, "catch_varargs")) return .{ .boolean = impl.def.catch_varargs };
@@ -1255,7 +1258,7 @@ const Renderer = struct {
         const picked = try pySlice(self.arena, items, start, stop, step);
         if (obj == .tuple) return .{ .tuple = picked };
         if (obj == .string) {
-            var aw: std.Io.Writer.Allocating = .init(self.arena);
+            var aw: Writer.Allocating = .init(self.arena);
             for (picked) |c| aw.writer.writeAll(c.string.bytes) catch return error.OutOfMemory;
             return .{ .string = .{ .bytes = aw.written(), .safe = obj.string.safe } };
         }
@@ -1329,7 +1332,7 @@ fn clampIndex(i: i64, len: i64) i64 {
 }
 
 fn pySlice(
-    arena: std.mem.Allocator,
+    arena: Allocator,
     items: []const Value,
     start_v: Value,
     stop_v: Value,

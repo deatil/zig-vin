@@ -261,10 +261,10 @@ test "an include of many distinct templates (no recursion) hits the total-load c
     defer src.deinit(gpa);
 
     for (0..n) |i| {
-        const name = try std.fmt.allocPrint(gpa, "t{d}", .{i});
+        const name = try gpa.print("t{d}", .{i});
         try owned_names.append(gpa, name);
         try entries.append(gpa, .{ .name = name, .source = "x" });
-        const tag = try std.fmt.allocPrint(gpa, "{{% include '{s}' %}}", .{name});
+        const tag = try gpa.print("{{% include '{s}' %}}", .{name});
         defer gpa.free(tag);
         try src.appendSlice(gpa, tag);
     }

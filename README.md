@@ -33,8 +33,8 @@ or use local path to add dependency at `build.zig.zon` file
 And the following to your `build.zig` file:
 
 ```zig
-    const zig_vin_dep = b.dependency("zig-vin", .{});
-    exe.root_module.addImport("zig-vin", zig_vin_dep.module("zig-vin"));
+const zig_vin_dep = b.dependency("zig-vin", .{});
+exe.root_module.addImport("zig-vin", zig_vin_dep.module("zig-vin"));
 ```
 
 The `zig-vin` structure can be imported in your application with:

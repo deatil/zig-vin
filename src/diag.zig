@@ -1,4 +1,5 @@
 const std = @import("std");
+const Writer = std.Io.Writer;
 
 pub const Diagnostic = struct {
     /// 1-based line in the template source; 0 when unknown.
@@ -19,7 +20,7 @@ pub const Diagnostic = struct {
         self.len = s.len;
     }
 
-    pub fn format(self: *const Diagnostic, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+    pub fn format(self: *const Diagnostic, writer: *Writer) Writer.Error!void {
         try writer.print("line {d}: {s}", .{ self.line, self.message() });
     }
 };

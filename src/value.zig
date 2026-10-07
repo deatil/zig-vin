@@ -1,4 +1,6 @@
 const std = @import("std");
+const Writer = std.Io.Writer;
+const Allocator = std.mem.Allocator;
 
 pub const Error = error{
     OutOfMemory,
@@ -41,6 +43,7 @@ pub const Map = struct {
             .string => |s| if (std.mem.eql(u8, s.bytes, key)) return p.value,
             else => {},
         };
+
         return null;
     }
 };
@@ -58,7 +61,7 @@ pub const Namespace = struct {
         return null;
     }
 
-    pub fn set(self: *Namespace, gpa: std.mem.Allocator, key: []const u8, v: Value) !void {
+    pub fn set(self: *Namespace, gpa: Allocator, key: []const u8, v: Value) !void {
         for (self.pairs.items) |*p| switch (p.key) {
             .string => |s| if (std.mem.eql(u8, s.bytes, key)) {
                 p.value = v;
@@ -119,12 +122,40 @@ pub const Value = union(enum) {
 
     pub const empty_string: Value = .{ .string = .{ .bytes = "" } };
 
-    pub fn str(bytes: []const u8) Value {
+    pub fn fromBool(boolean: bool) Value {
+        return .{ .boolean = boolean };
+    }
+
+    pub fn fromInt(integer: i64) Value {
+        return .{ .integer = integer };
+    }
+
+    pub fn fromFloat(float: f64) Value {
+        return .{ .float = float };
+    }
+
+    pub fn fromString(bytes: []const u8) Value {
         return .{ .string = .{ .bytes = bytes } };
     }
 
     pub fn markup(bytes: []const u8) Value {
         return .{ .string = .{ .bytes = bytes, .safe = true } };
+    }
+
+    pub fn fromList(list: []const Value) Value {
+        return .{ .list = list };
+    }
+
+    pub fn fromMap(map: Map) Value {
+        return .{ .map = map };
+    }
+
+    pub fn fromNamespace(namespace: *Namespace) Value {
+        return .{ .namespace = namespace };
+    }
+
+    pub fn fromLoop(loop: *Loop) Value {
+        return .{ .loop = loop };
     }
 
     pub fn isUndefined(self: Value) bool {
@@ -175,17 +206,21 @@ pub const Value = union(enum) {
 /// Everything is allocated from `arena`; nothing is copied that does not have
 /// to be (string bytes are borrowed from `v`, so `v`'s backing memory must
 /// outlive the render).
-pub fn from(arena: std.mem.Allocator, v: anytype) Error!Value {
+pub fn from(arena: Allocator, v: anytype) Error!Value {
     const T = @TypeOf(v);
+
     if (T == Value) return v;
     if (T == Str) return .{ .string = v };
+    if (T == *Namespace) return .{ .namespace = v };
+    if (T == *Loop) return .{ .loop = v };
+
     return switch (@typeInfo(T)) {
         .null, .void => .none,
         .bool => .{ .boolean = v },
         .int, .comptime_int => .{ .integer = std.math.cast(i64, v) orelse return error.OutOfRange },
         .float, .comptime_float => .{ .float = @floatCast(v) },
-        .@"enum" => Value.str(@tagName(v)),
-        .enum_literal => Value.str(@tagName(v)),
+        .@"enum" => Value.fromString(@tagName(v)),
+        .enum_literal => Value.fromString(@tagName(v)),
         .optional => if (v) |inner| try from(arena, inner) else .none,
         .array => try fromSlice(arena, &v),
         .pointer => |p| switch (p.size) {
@@ -205,7 +240,7 @@ pub fn from(arena: std.mem.Allocator, v: anytype) Error!Value {
 
             var pairs = try arena.alloc(Pair, s.field_names.len);
             inline for (s.field_names, 0..) |name, i| {
-                pairs[i] = .{ .key = Value.str(name), .value = try from(arena, @field(v, name)) };
+                pairs[i] = .{ .key = Value.fromString(name), .value = try from(arena, @field(v, name)) };
             }
 
             break :blk .{ .map = .{ .pairs = pairs } };
@@ -214,9 +249,9 @@ pub fn from(arena: std.mem.Allocator, v: anytype) Error!Value {
     };
 }
 
-fn fromSlice(arena: std.mem.Allocator, s: anytype) Error!Value {
+fn fromSlice(arena: Allocator, s: anytype) Error!Value {
     const Elem = std.meta.Elem(@TypeOf(s));
-    if (Elem == u8) return Value.str(s);
+    if (Elem == u8) return Value.fromString(s);
     var items = try arena.alloc(Value, s.len);
     for (s, 0..) |e, i| items[i] = try from(arena, e);
     return .{ .list = items };
@@ -226,19 +261,19 @@ fn fromSlice(arena: std.mem.Allocator, s: anytype) Error!Value {
 /// dependency. Object order is preserved (`ObjectMap` is a
 /// `StringArrayHashMap`). JSON has no undefined and no markup, so every string
 /// arrives unsafe, which is the correct default for untrusted data.
-pub fn fromJson(arena: std.mem.Allocator, v: std.json.Value) Error!Value {
+pub fn fromJson(arena: Allocator, v: std.json.Value) Error!Value {
     return fromJsonDepth(arena, v, 0);
 }
 
-fn fromJsonDepth(arena: std.mem.Allocator, v: std.json.Value, depth: usize) Error!Value {
+fn fromJsonDepth(arena: Allocator, v: std.json.Value, depth: usize) Error!Value {
     if (depth > max_value_depth) return error.OutOfRange;
     return switch (v) {
         .null => .none,
         .bool => |b| .{ .boolean = b },
         .integer => |i| .{ .integer = i },
         .float => |f| .{ .float = f },
-        .number_string => |s| Value.str(s),
-        .string => |s| Value.str(s),
+        .number_string => |s| Value.fromString(s),
+        .string => |s| Value.fromString(s),
         .array => |a| blk: {
             const items = try arena.alloc(Value, a.items.len);
             for (a.items, 0..) |e, i| items[i] = try fromJsonDepth(arena, e, depth + 1);
@@ -249,7 +284,7 @@ fn fromJsonDepth(arena: std.mem.Allocator, v: std.json.Value, depth: usize) Erro
             var it = o.iterator();
             var i: usize = 0;
             while (it.next()) |e| : (i += 1) {
-                pairs[i] = .{ .key = Value.str(e.key_ptr.*), .value = try fromJsonDepth(arena, e.value_ptr.*, depth + 1) };
+                pairs[i] = .{ .key = Value.fromString(e.key_ptr.*), .value = try fromJsonDepth(arena, e.value_ptr.*, depth + 1) };
             }
             break :blk .{ .map = .{ .pairs = pairs } };
         },
@@ -260,7 +295,7 @@ fn fromJsonDepth(arena: std.mem.Allocator, v: std.json.Value, depth: usize) Erro
 
 /// markupsafe's escape set, exactly: `&<>` plus **numeric** entities for the
 /// two quotes (`&#34;`/`&#39;`, not `&quot;`/`&#x27;`).
-pub fn escapeTo(writer: *std.Io.Writer, bytes: []const u8) Error!void {
+pub fn escapeTo(writer: *Writer, bytes: []const u8) Error!void {
     for (bytes) |c| {
         const rep: ?[]const u8 = switch (c) {
             '&' => "&amp;",
@@ -274,20 +309,20 @@ pub fn escapeTo(writer: *std.Io.Writer, bytes: []const u8) Error!void {
     }
 }
 
-pub fn escapeAlloc(arena: std.mem.Allocator, bytes: []const u8) Error![]const u8 {
-    var aw: std.Io.Writer.Allocating = .init(arena);
+pub fn escapeAlloc(arena: Allocator, bytes: []const u8) Error![]const u8 {
+    var aw: Writer.Allocating = .init(arena);
     try escapeTo(&aw.writer, bytes);
     return aw.written();
 }
 
-fn w(writer: *std.Io.Writer, bytes: []const u8) Error!void {
+fn w(writer: *Writer, bytes: []const u8) Error!void {
     writer.writeAll(bytes) catch return error.OutOfMemory;
 }
 
 /// `str(v)` — what `{{ v }}` puts in the output before escaping. Undefined
 /// renders as the empty string (the lenient policy; the strict policy never
 /// gets here).
-pub fn strTo(writer: *std.Io.Writer, v: Value) Error!void {
+pub fn strTo(writer: *Writer, v: Value) Error!void {
     return strToDepth(writer, v, 0);
 }
 
@@ -299,7 +334,7 @@ pub fn strTo(writer: *std.Io.Writer, v: Value) Error!void {
 /// was a **SIGSEGV** in ReleaseFast, from a 103-byte template
 pub const max_value_depth: usize = 256;
 
-fn strToDepth(writer: *std.Io.Writer, v: Value, depth: usize) Error!void {
+fn strToDepth(writer: *Writer, v: Value, depth: usize) Error!void {
     if (depth > max_value_depth) return error.OutOfRange;
     switch (v) {
         .undef => {},
@@ -312,20 +347,20 @@ fn strToDepth(writer: *std.Io.Writer, v: Value, depth: usize) Error!void {
     }
 }
 
-pub fn strAlloc(arena: std.mem.Allocator, v: Value) Error![]const u8 {
+pub fn strAlloc(arena: Allocator, v: Value) Error![]const u8 {
     if (v == .string) return v.string.bytes;
-    var aw: std.Io.Writer.Allocating = .init(arena);
+    var aw: Writer.Allocating = .init(arena);
     try strTo(&aw.writer, v);
     return aw.written();
 }
 
 /// `repr(v)` — the form used for elements *inside* a container, which is why
 /// `{{ ['a'] }}` renders `['a']` and not `[a]`.
-pub fn reprTo(writer: *std.Io.Writer, v: Value) Error!void {
+pub fn reprTo(writer: *Writer, v: Value) Error!void {
     return reprToDepth(writer, v, 0);
 }
 
-fn reprToDepth(writer: *std.Io.Writer, v: Value, depth: usize) Error!void {
+fn reprToDepth(writer: *Writer, v: Value, depth: usize) Error!void {
     if (depth > max_value_depth) return error.OutOfRange;
     switch (v) {
         .string => |s| try reprStrTo(writer, s.bytes),
@@ -359,7 +394,7 @@ fn reprToDepth(writer: *std.Io.Writer, v: Value, depth: usize) Error!void {
     }
 }
 
-fn reprPairs(writer: *std.Io.Writer, pairs: []const Pair, depth: usize) Error!void {
+fn reprPairs(writer: *Writer, pairs: []const Pair, depth: usize) Error!void {
     if (depth > max_value_depth) return error.OutOfRange;
     try w(writer, "{");
     for (pairs, 0..) |p, i| {
@@ -374,7 +409,7 @@ fn reprPairs(writer: *std.Io.Writer, pairs: []const Pair, depth: usize) Error!vo
 /// Python string repr: single quotes, switching to double quotes when the text
 /// holds a `'` but no `"`. Bytes >= 0x80 pass through — for valid UTF-8 that
 /// matches CPython, which prints printable non-ASCII verbatim.
-fn reprStrTo(writer: *std.Io.Writer, bytes: []const u8) Error!void {
+fn reprStrTo(writer: *Writer, bytes: []const u8) Error!void {
     var has_single = false;
     var has_double = false;
     for (bytes) |c| {
@@ -406,7 +441,7 @@ fn reprStrTo(writer: *std.Io.Writer, bytes: []const u8) Error!void {
 /// the decimal exponent is `< -4` or `>= 16`, and always carrying a `.0` when
 /// there is no fractional part. `1e15` is `1000000000000000.0`; `1e16` is
 /// `1e+16`; `1e-5` is `1e-05`.
-pub fn floatTo(writer: *std.Io.Writer, f: f64) Error!void {
+pub fn floatTo(writer: *Writer, f: f64) Error!void {
     if (std.math.isNan(f)) return w(writer, "nan");
     if (std.math.isInf(f)) return w(writer, if (f < 0) "-inf" else "inf");
 
@@ -495,7 +530,7 @@ fn isNumeric(v: Value) bool {
 ///
 /// `autoescape` only reaches markup propagation: joining a safe string with an
 /// unsafe one escapes the unsafe half, mirroring `Markup.__add__`.
-pub fn binary(arena: std.mem.Allocator, op: BinOp, a: Value, b: Value) Error!Value {
+pub fn binary(arena: Allocator, op: BinOp, a: Value, b: Value) Error!Value {
     if (a == .undef or b == .undef) return error.UndefinedValue;
 
     if (op == .concat) return concat(arena, &.{ a, b }, false);
@@ -611,16 +646,16 @@ fn intPow(x: i64, y: i64) Error!Value {
     return .{ .integer = acc };
 }
 
-fn joinStrings(arena: std.mem.Allocator, a: Str, b: Str) Error!Value {
+fn joinStrings(arena: Allocator, a: Str, b: Str) Error!Value {
     if (a.safe or b.safe) {
         const ab = if (a.safe) a.bytes else try escapeAlloc(arena, a.bytes);
         const bb = if (b.safe) b.bytes else try escapeAlloc(arena, b.bytes);
         return .{ .string = .{ .bytes = try std.mem.concat(arena, u8, &.{ ab, bb }), .safe = true } };
     }
-    return Value.str(try std.mem.concat(arena, u8, &.{ a.bytes, b.bytes }));
+    return Value.fromString(try std.mem.concat(arena, u8, &.{ a.bytes, b.bytes }));
 }
 
-fn repeatStr(arena: std.mem.Allocator, s: Str, times: i64) Error!Value {
+fn repeatStr(arena: Allocator, s: Str, times: i64) Error!Value {
     if (times <= 0) return .{ .string = .{ .bytes = "", .safe = s.safe } };
     const n: usize = @intCast(times);
 
@@ -632,7 +667,7 @@ fn repeatStr(arena: std.mem.Allocator, s: Str, times: i64) Error!Value {
     return .{ .string = .{ .bytes = out, .safe = s.safe } };
 }
 
-fn repeatList(arena: std.mem.Allocator, l: []const Value, times: i64) Error!Value {
+fn repeatList(arena: Allocator, l: []const Value, times: i64) Error!Value {
     if (times <= 0) return .{ .list = &.{} };
     const n: usize = @intCast(times);
 
@@ -644,7 +679,7 @@ fn repeatList(arena: std.mem.Allocator, l: []const Value, times: i64) Error!Valu
     return .{ .list = out };
 }
 
-fn repeatTuple(arena: std.mem.Allocator, l: []const Value, times: i64) Error!Value {
+fn repeatTuple(arena: Allocator, l: []const Value, times: i64) Error!Value {
     const as_list = try repeatList(arena, l, times);
     return .{ .tuple = as_list.list };
 }
@@ -658,12 +693,12 @@ pub const max_items: usize = 1 << 22;
 /// `~` (and the autoescape-aware join underneath it). With `autoescape` on this
 /// is markupsafe's `markup_join`: every non-markup part is escaped and the
 /// result is markup; with it off it is a plain `str.join`.
-pub fn concat(arena: std.mem.Allocator, parts: []const Value, autoescape: bool) Error!Value {
-    var aw: std.Io.Writer.Allocating = .init(arena);
+pub fn concat(arena: Allocator, parts: []const Value, autoescape: bool) Error!Value {
+    var aw: Writer.Allocating = .init(arena);
     for (parts) |p| {
         if (p == .undef) return error.UndefinedValue;
         if (autoescape and !(p == .string and p.string.safe)) {
-            var tmp: std.Io.Writer.Allocating = .init(arena);
+            var tmp: Writer.Allocating = .init(arena);
             try strTo(&tmp.writer, p);
             try escapeTo(&aw.writer, tmp.written());
         } else {
@@ -794,20 +829,20 @@ pub fn contains(haystack: Value, needle: Value) Error!bool {
 /// not by byte, so `len('ěš') == 2`. Invalid UTF-8 degrades to one byte per
 /// character rather than failing; a template engine must not reject data it
 /// merely has to copy through.
-pub fn chars(arena: std.mem.Allocator, s: Str) Error![]const Value {
+pub fn chars(arena: Allocator, s: Str) Error![]const Value {
     var out: std.ArrayList(Value) = .empty;
     var i: usize = 0;
     while (i < s.bytes.len) {
         const n = std.unicode.utf8ByteSequenceLength(s.bytes[i]) catch 1;
         const end = @min(i + n, s.bytes.len);
-        try out.append(arena, Value.str(s.bytes[i..end]));
+        try out.append(arena, Value.fromString(s.bytes[i..end]));
         i = end;
     }
     return out.items;
 }
 
 /// The sequence a `{% for %}` or a sequence filter walks.
-pub fn iterate(arena: std.mem.Allocator, v: Value) Error![]const Value {
+pub fn iterate(arena: Allocator, v: Value) Error![]const Value {
     return switch (v) {
         .list, .tuple => |l| l,
         .string => |s| try chars(arena, s),

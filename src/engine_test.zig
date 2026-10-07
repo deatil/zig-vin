@@ -121,10 +121,10 @@ test "a caller can register its own filter and test" {
                 else => return error.TypeMismatch,
             };
             const mask: u32 = if (bits == 0) 0 else @truncate(~@as(u64, 0) << @intCast(32 - bits));
-            const s = try std.fmt.allocPrint(ctx.arena, "{d}.{d}.{d}.{d}", .{
+            const s = try ctx.arena.print("{d}.{d}.{d}.{d}", .{
                 (mask >> 24) & 0xff, (mask >> 16) & 0xff, (mask >> 8) & 0xff, mask & 0xff,
             });
-            return vin.Value.str(s);
+            return vin.Value.fromString(s);
         }
     }.f);
     try env.addTest("private", struct {
@@ -216,7 +216,7 @@ test "valueFromJson preserves object order" {
     const parsed = try std.json.parseFromSlice(std.json.Value, a, "{\"z\":1,\"a\":2,\"m\":3}", .{});
     const ctx = try vin.valueFromJson(a, parsed.value);
     const out = try renderWith(gpa, .{}, "{% for k in ctx %}{{ k }}{% endfor %}", .{ .map = .{ .pairs = &.{
-        .{ .key = vin.Value.str("ctx"), .value = ctx },
+        .{ .key = vin.Value.fromString("ctx"), .value = ctx },
     } } });
     defer gpa.free(out);
     try testing.expectEqualStrings("zam", out);

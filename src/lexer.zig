@@ -1,4 +1,5 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 pub const Options = struct {
     /// Remove the first newline after a *statement* or comment tag (never after
@@ -92,7 +93,7 @@ pub const Result = struct {
 
 pub const Diagnostic = @import("diag.zig").Diagnostic;
 
-pub fn lex(arena: std.mem.Allocator, source: []const u8, opts: Options, diag: *Diagnostic) Error!Result {
+pub fn lex(arena: Allocator, source: []const u8, opts: Options, diag: *Diagnostic) Error!Result {
     var l: Lexer = .{
         .arena = arena,
         .src = source,
@@ -112,7 +113,7 @@ pub fn lex(arena: std.mem.Allocator, source: []const u8, opts: Options, diag: *D
 }
 
 const Lexer = struct {
-    arena: std.mem.Allocator,
+    arena: Allocator,
     src: []const u8,
     pos: usize = 0,
     line: usize = 1,
@@ -536,7 +537,7 @@ const Lexer = struct {
     }
 };
 
-fn stripUnderscores(arena: std.mem.Allocator, s: []const u8) Error![]const u8 {
+fn stripUnderscores(arena: Allocator, s: []const u8) Error![]const u8 {
     if (std.mem.indexOfScalar(u8, s, '_') == null) return s;
     var out: std.ArrayList(u8) = .empty;
     for (s) |c| if (c != '_') try out.append(arena, c);

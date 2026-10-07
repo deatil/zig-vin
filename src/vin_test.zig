@@ -1,0 +1,137 @@
+const std = @import("std");
+const testing = std.testing;
+
+const vin = @import("vin.zig");
+
+test "DirLoader use dir" {
+    const io = testing.io;
+    const alloc = testing.allocator;
+
+    var arena: std.heap.ArenaAllocator = .init(alloc);
+    defer arena.deinit();
+
+    const a = arena.allocator();
+
+    const dl: vin.DirLoader = .{ 
+        .io = io, 
+        .root = try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}), 
+        .options = .{ 
+            .suffix = ".htm",
+        },
+    };
+
+    var env = try vin.Environment.initWithLoader(a, .{}, dl.loader());
+    defer env.deinit();
+
+    {
+        const out = try env.renderTemplateAlloc(a, "show", .none, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[42]", out);
+    }
+
+    {
+        const out = try env.renderTemplateAlloc(a, "sub/show1", .none, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[4222]", out);
+    }
+
+    {
+        const ctx = try vin.valueFrom(a, .{
+            .name = "test name",
+        });
+        const out = try env.renderTemplateAlloc(a, "sub/show2", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[4222==test name]", out);
+    }
+}
+
+test "MapLoader renderTemplateAlloc" {
+    const alloc = testing.allocator;
+
+    var arena: std.heap.ArenaAllocator = .init(alloc);
+    defer arena.deinit();
+
+    const a = arena.allocator();
+
+    var map: vin.MapLoader = .{ .entries = &.{
+        .{ .name = "base",   .source = @embedFile("testdata/views/base.htm") },
+        .{ .name = "show", .source = @embedFile("testdata/views/show.htm") },
+        .{ .name = "sub/show1", .source = @embedFile("testdata/views/sub/show1.htm") },
+        .{ .name = "sub/show2", .source = @embedFile("testdata/views/sub/show2.htm") },
+    } };
+
+    var env = try vin.Environment.initWithLoader(a, .{}, map.loader());
+    defer env.deinit();
+
+    {
+        const out = try env.renderTemplateAlloc(a, "show", .none, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[42]", out);
+    }
+
+    {
+        const out = try env.renderTemplateAlloc(a, "sub/show1", .none, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[4222]", out);
+    }
+
+    {
+        const ctx = try vin.valueFrom(a, .{
+            .name = "test name",
+        });
+        const out = try env.renderTemplateAlloc(a, "sub/show2", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[4222==test name]", out);
+    }
+}
+
+test "DirLoader with json" {
+    const io = testing.io;
+    const alloc = testing.allocator;
+
+    var arena: std.heap.ArenaAllocator = .init(alloc);
+    defer arena.deinit();
+
+    const a = arena.allocator();
+
+    const dl: vin.DirLoader = .{ 
+        .io = io, 
+        .root = try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}), 
+        .options = .{ 
+            .suffix = ".htm",
+        },
+    };
+
+    var env = try vin.Environment.initWithLoader(a, .{}, dl.loader());
+    defer env.deinit();
+
+    {
+        const text = 
+            \\{"name": "test name"}
+        ;
+        const parsed = try std.json.parseFromSlice(std.json.Value, a, text, .{});
+        const ctx = try vin.valueFromJson(a, parsed.value);
+
+        const out = try env.renderTemplateAlloc(a, "sub/show2", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[4222==test name]", out);
+    }
+
+    {
+        var map: vin.value.Namespace = .{};
+        try map.set(a, "name", vin.Value.fromString("test name"));
+        const ctx: vin.Value = .fromNamespace(&map);
+
+        const out = try env.renderTemplateAlloc(a, "sub/show2", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[4222==test name]", out);
+    }
+
+    {
+        const ctx = try vin.valueFrom(a, .{ .name = "test name", .vlans = [_]u16{ 10, 20 } });
+
+        const out = try env.renderTemplateAlloc(a, "sub/show3", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[4222==test name10,20,]", out);
+    }
+}

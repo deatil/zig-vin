@@ -1,4 +1,6 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const lex = @import("lexer.zig");
 const ast = @import("ast.zig");
 const value = @import("value.zig");
@@ -54,7 +56,7 @@ const unimplemented_tags = [_][]const u8{
 };
 
 pub fn parse(
-    arena: std.mem.Allocator,
+    arena: Allocator,
     pieces: []const lex.Piece,
     registry: Registry,
     limits: Limits,
@@ -81,7 +83,7 @@ const Body = struct {
 };
 
 const Parser = struct {
-    arena: std.mem.Allocator,
+    arena: Allocator,
     pieces: []const lex.Piece,
     idx: usize = 0,
     registry: Registry,
@@ -893,7 +895,7 @@ const Stream = struct {
                     try buf.appendSlice(self.p.arena, n.text);
                     self.i += 1;
                 }
-                return self.dupe(.{ .literal = Value.str(buf.items) });
+                return self.dupe(.{ .literal = Value.fromString(buf.items) });
             },
             .integer => {
                 self.i += 1;

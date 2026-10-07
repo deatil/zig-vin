@@ -1,4 +1,5 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 pub const Error = error{
     OutOfMemory,
@@ -13,7 +14,7 @@ pub const Error = error{
 /// signal absence with an error.
 pub const Loader = struct {
     ctx: *const anyopaque,
-    load: *const fn (ctx: *const anyopaque, arena: std.mem.Allocator, name: []const u8) Error!?[]const u8,
+    load: *const fn (ctx: *const anyopaque, arena: Allocator, name: []const u8) Error!?[]const u8,
 };
 
 /// Templates held in memory, looked up by exact name. The whole table can be a
@@ -32,7 +33,7 @@ pub const MapLoader = struct {
         return .{ .ctx = self, .load = load };
     }
 
-    fn load(ctx: *const anyopaque, arena: std.mem.Allocator, name: []const u8) Error!?[]const u8 {
+    fn load(ctx: *const anyopaque, arena: Allocator, name: []const u8) Error!?[]const u8 {
         _ = arena;
         const self: *const MapLoader = @ptrCast(@alignCast(ctx));
         for (self.entries) |e| if (std.mem.eql(u8, e.name, name)) return e.source;
@@ -129,7 +130,7 @@ pub const DirLoader = struct {
         return .{ .ctx = self, .load = load };
     }
 
-    fn load(ctx: *const anyopaque, arena: std.mem.Allocator, name: []const u8) Error!?[]const u8 {
+    fn load(ctx: *const anyopaque, arena: Allocator, name: []const u8) Error!?[]const u8 {
         const self: *const DirLoader = @ptrCast(@alignCast(ctx));
 
         var buf: [max_name_len + 64]u8 = undefined;

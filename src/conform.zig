@@ -1,4 +1,7 @@
 const std = @import("std");
+const Writer = std.Io.Writer;
+const Allocator = std.mem.Allocator;
+
 const vin = @import("vin.zig");
 
 /// An extra template the case's loader can serve, so composition tags have
@@ -33,7 +36,7 @@ pub const Case = struct {
 
 /// Decodes one entry of the transcript's `cases` array. `arena` owns only the
 /// `templates` slice; every string points into `parsed`.
-pub fn caseFromJson(arena: std.mem.Allocator, v: std.json.Value) !Case {
+pub fn caseFromJson(arena: Allocator, v: std.json.Value) !Case {
     const o = v.object;
     const tpls = o.get("templates").?.object;
     var entries = try arena.alloc(Tpl, tpls.count());
@@ -63,7 +66,7 @@ pub const Outcome = union(enum) {
     /// failing is compared.
     failed: []const u8,
 
-    pub fn deinit(self: Outcome, gpa: std.mem.Allocator) void {
+    pub fn deinit(self: Outcome, gpa: Allocator) void {
         switch (self) {
             .ok => |b| gpa.free(b),
             .failed => {},
@@ -73,7 +76,7 @@ pub const Outcome = union(enum) {
 
 /// Render `c` with this module. The JSON context goes in through
 /// `valueFromJson`, which is also the ingress path a real caller uses.
-pub fn renderCase(gpa: std.mem.Allocator, c: Case) !Outcome {
+pub fn renderCase(gpa: Allocator, c: Case) !Outcome {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
     const a = arena.allocator();
@@ -117,7 +120,7 @@ pub fn refFromJson(v: std.json.Value) RefOutcome {
 }
 
 /// Compare one case, printing enough on failure to debug it without rerunning.
-pub fn expectMatch(gpa: std.mem.Allocator, c: Case, ref: RefOutcome, label: []const u8) !void {
+pub fn expectMatch(gpa: Allocator, c: Case, ref: RefOutcome, label: []const u8) !void {
     const mine = try renderCase(gpa, c);
     defer mine.deinit(gpa);
 
@@ -163,7 +166,7 @@ pub fn expectMatch(gpa: std.mem.Allocator, c: Case, ref: RefOutcome, label: []co
 const Escaped = struct {
     b: []const u8,
 
-    pub fn format(self: Escaped, w: *std.Io.Writer) std.Io.Writer.Error!void {
+    pub fn format(self: Escaped, w: *Writer) Writer.Error!void {
         try w.writeByte('"');
         for (self.b) |ch| switch (ch) {
             '\n' => try w.writeAll("\\n"),
