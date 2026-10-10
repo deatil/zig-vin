@@ -2,6 +2,8 @@ const std = @import("std");
 const testing = std.testing;
 
 const vin = @import("vin.zig");
+const filters = vin.filters;
+const value = vin.value;
 
 test "DirLoader use dir" {
     const io = testing.io;
@@ -219,7 +221,6 @@ test "DirLoader create with Value create" {
 
     var arena: std.heap.ArenaAllocator = .init(alloc);
     defer arena.deinit();
-
     const a = arena.allocator();
 
     const dl: *vin.DirLoader = try .create(
@@ -244,4 +245,30 @@ test "DirLoader create with Value create" {
         try testing.expectEqualStrings("[4222==test name10,20,]", out);
     }
 
+}
+
+fn greet_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Value {
+    const name_val = args.get(0, "name") orelse return error.BadArgument;
+    const s = ctx.toStr(name_val) catch return error.BadArgument;
+    const out = try ctx.arena.dupe(u8, s);
+    return .{ .string = .{ .bytes = out, .safe = false } };
+}
+
+test "Env addGlobal" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    try env.addGlobal("greet", greet_fn);
+
+    var tpl = try env.compile("\\{{ greet('Alice') }}", null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("\\Alice", out);
 }

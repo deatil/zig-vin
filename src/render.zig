@@ -72,12 +72,15 @@ pub const Options = struct {
     max_templates: usize = 256,
 };
 
+pub const GlobalFn = *const fn (ctx: *filters.Ctx, args: filters.Args) filters.Error!Value;
+
 /// How the renderer reaches the environment's filter/test registries without
 /// this file depending on the environment.
 pub const Lookup = struct {
     ctx: *const anyopaque,
     filter: *const fn (ctx: *const anyopaque, name: []const u8) ?filters.Fn,
     test_fn: *const fn (ctx: *const anyopaque, name: []const u8) ?filters.TestFn,
+    global: *const fn (ctx: *const anyopaque, name: []const u8) ?GlobalFn,
     /// Where `{% extends %}`/`{% include %}`/`{% import %}` get their bytes.
     /// `null` makes every composition tag `error.NoLoader` — a template that
     /// names another template on an environment with no loader is a mistake
@@ -1089,6 +1092,12 @@ const Renderer = struct {
         if (c.callee.* == .name) {
             const name = c.callee.name;
             const args = try self.evalArgs(c.args, c.line);
+
+            if (self.lookup.global(self.lookup.ctx, name)) |fn_ptr| {
+                var ctx = self.filterCtx();
+                return fn_ptr(&ctx, args) catch |err| return self.opError(c.line, err);
+            }
+
             if (std.mem.eql(u8, name, "super") and self.block_stack.items.len != 0)
                 return self.doSuper(c.line);
             const bound = self.resolve(name);

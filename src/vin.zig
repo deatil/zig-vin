@@ -7,8 +7,8 @@ const parser = @import("parser.zig");
 const ast = @import("ast.zig");
 const loader_mod = @import("loader.zig");
 const render_mod = @import("render.zig");
-const filters_mod = @import("filters.zig");
 
+pub const filters = @import("filters.zig");
 pub const value = @import("value.zig");
 
 pub const Value = value.Value;
@@ -84,12 +84,14 @@ pub const RenderError = render_mod.Error;
 pub const Error = CompileError || RenderError;
 
 /// Filter/test authoring surface, for `Environment.addFilter`/`addTest`.
-pub const FilterCtx = filters_mod.Ctx;
-pub const FilterFn = filters_mod.Fn;
-pub const TestFn = filters_mod.TestFn;
-pub const FilterArgs = filters_mod.Args;
-pub const FilterError = filters_mod.Error;
-pub const FilterKwarg = filters_mod.Kwarg;
+pub const FilterCtx = filters.Ctx;
+pub const FilterFn = filters.Fn;
+pub const TestFn = filters.TestFn;
+/// Global function authoring surface, for `Environment.addGlobal`.
+pub const GlobalFn = render_mod.GlobalFn;
+pub const FilterArgs = filters.Args;
+pub const FilterError = filters.Error;
+pub const FilterKwarg = filters.Kwarg;
 
 /// Owns the filter and test registries and the syntax options. Compiling a
 /// template resolves every filter and test name against this environment, so
@@ -99,6 +101,7 @@ pub const Environment = struct {
     options: Options,
     filters: std.StringHashMapUnmanaged(FilterFn) = .empty,
     tests: std.StringHashMapUnmanaged(TestFn) = .empty,
+    globals: std.StringHashMapUnmanaged(GlobalFn) = .empty,
     /// Optional; without one, any composition tag is `error.NoLoader`.
     loader: ?Loader = null,
 
@@ -119,18 +122,20 @@ pub const Environment = struct {
         var env: Environment = .{ .gpa = gpa, .options = options, .loader = template_loader };
         errdefer env.deinit();
 
-        for (filters_mod.builtin_filters) |e| {
+        for (filters.builtin_filters) |e| {
             try env.filters.put(gpa, e.name, e.func);
         }
-        for (filters_mod.builtin_tests) |e| {
+        for (filters.builtin_tests) |e| {
             try env.tests.put(gpa, e.name, e.func);
         }
+
         return env;
     }
 
     pub fn deinit(self: *Environment) void {
         self.filters.deinit(self.gpa);
         self.tests.deinit(self.gpa);
+        self.globals.deinit(self.gpa);
         self.* = undefined;
     }
 
@@ -142,6 +147,12 @@ pub const Environment = struct {
 
     pub fn addTest(self: *Environment, name: []const u8, func: TestFn) error{OutOfMemory}!void {
         try self.tests.put(self.gpa, name, func);
+    }
+
+    /// Register (or replace) a global function. `name` is borrowed and must
+    /// outlive the environment.
+    pub fn addGlobal(self: *Environment, name: []const u8, func: GlobalFn) error{OutOfMemory}!void {
+        try self.globals.put(self.gpa, name, func);
     }
 
     /// Parse `source` into a reusable `Template`. The template copies the
@@ -237,6 +248,11 @@ pub const Environment = struct {
         return self.tests.get(name);
     }
 
+    fn globalLookup(ctx: *const anyopaque, name: []const u8) ?GlobalFn {
+        const self: *const Environment = @ptrCast(@alignCast(ctx));
+        return self.globals.get(name);
+    }
+
     /// Compiles a *loaded* template into the render arena. Loaded templates go
     /// through exactly the same lexer, options and name resolution as the entry
     /// template — an included template naming a missing filter fails as loudly
@@ -317,6 +333,7 @@ pub const Template = struct {
             .ctx = self.env,
             .filter = Environment.filterLookup,
             .test_fn = Environment.testLookup,
+            .global = Environment.globalLookup,
             .loader = self.env.loader,
             .compile = Environment.compileInto,
         }, out, d) catch |e| {
