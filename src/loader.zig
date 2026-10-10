@@ -30,12 +30,12 @@ pub const MapLoader = struct {
     };
 
     pub fn create(gpa: Allocator, entries: []const Entry) !*MapLoader {
-        const val_ptr = try gpa.create(MapLoader);
-        val_ptr.* = .{ 
+        const loader_ptr = try gpa.create(MapLoader);
+        loader_ptr.* = .{ 
             .entries = entries, 
         };
 
-        return val_ptr;
+        return loader_ptr;
     }
 
     pub fn loader(self: *const MapLoader) Loader {
@@ -136,14 +136,14 @@ pub const DirLoader = struct {
     };
 
     pub fn create(gpa: Allocator, io: std.Io, root: std.Io.Dir, options: Options) !*DirLoader {
-        const val_ptr = try gpa.create(DirLoader);
-        val_ptr.* = .{ 
+        const loader_ptr = try gpa.create(DirLoader);
+        loader_ptr.* = .{ 
             .io = io, 
             .root = root, 
             .options = options, 
         };
 
-        return val_ptr;
+        return loader_ptr;
     }
 
     pub fn loader(self: *const DirLoader) Loader {
