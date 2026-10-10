@@ -29,6 +29,15 @@ pub const MapLoader = struct {
         source: []const u8,
     };
 
+    pub fn create(gpa: Allocator, entries: []const Entry) !*MapLoader {
+        const val_ptr = try gpa.create(MapLoader);
+        val_ptr.* = .{ 
+            .entries = entries, 
+        };
+
+        return val_ptr;
+    }
+
     pub fn loader(self: *const MapLoader) Loader {
         return .{ .ctx = self, .load = load };
     }
@@ -125,6 +134,17 @@ pub const DirLoader = struct {
         /// portable rather than kernel-dependent.
         allow_symlinks: bool = false,
     };
+
+    pub fn create(gpa: Allocator, io: std.Io, root: std.Io.Dir, options: Options) !*DirLoader {
+        const val_ptr = try gpa.create(DirLoader);
+        val_ptr.* = .{ 
+            .io = io, 
+            .root = root, 
+            .options = options, 
+        };
+
+        return val_ptr;
+    }
 
     pub fn loader(self: *const DirLoader) Loader {
         return .{ .ctx = self, .load = load };

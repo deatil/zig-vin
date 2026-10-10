@@ -28,6 +28,18 @@ pub const Str = struct {
 pub const Pair = struct {
     key: Value,
     value: Value,
+
+    pub fn create(gpa: Allocator, key: []const u8, v: Value) !Pair {
+        const val_ptr = try gpa.create(Pair);
+        val_ptr.* = .{ 
+            .key = .{ 
+                .string = .{ .bytes = try gpa.dupe(u8, key) },
+            }, 
+            .value = v, 
+        };
+
+        return val_ptr.*;
+    }
 };
 
 /// An **ordered** mapping — a slice of pairs in insertion order, never a hash
@@ -37,6 +49,15 @@ pub const Pair = struct {
 /// order here loses nothing and flattening it would.
 pub const Map = struct {
     pairs: []const Pair,
+
+    pub fn create(gpa: Allocator, pairs: []const Pair) !Map {
+        const val_ptr = try gpa.create(Map);
+        val_ptr.* = .{ 
+            .pairs = pairs, 
+        };
+
+        return val_ptr.*;
+    }
 
     pub fn get(self: Map, key: []const u8) ?Value {
         for (self.pairs) |p| switch (p.key) {
@@ -52,6 +73,15 @@ pub const Map = struct {
 /// way a `{% set %}` inside a `{% for %}` body can outlive the loop's scope.
 pub const Namespace = struct {
     pairs: std.ArrayList(Pair) = .empty,
+
+    pub fn create(gpa: Allocator) !*Namespace {
+        const val_ptr = try gpa.create(Namespace);
+        val_ptr.* = .{ 
+            .pairs = .empty, 
+        };
+
+        return val_ptr;
+    }
 
     pub fn get(self: *const Namespace, key: []const u8) ?Value {
         for (self.pairs.items) |p| switch (p.key) {
@@ -69,6 +99,7 @@ pub const Namespace = struct {
             },
             else => {},
         };
+
         try self.pairs.append(gpa, .{ .key = .{ .string = .{ .bytes = key } }, .value = v });
     }
 };
@@ -121,6 +152,13 @@ pub const Value = union(enum) {
     macro: MacroRef,
 
     pub const empty_string: Value = .{ .string = .{ .bytes = "" } };
+
+    pub fn create(gpa: Allocator, v: Value) !Value {
+        const val_ptr = try gpa.create(Value);
+        val_ptr.* = v;
+
+        return val_ptr.*;
+    }
 
     pub fn fromBool(boolean: bool) Value {
         return .{ .boolean = boolean };
@@ -290,8 +328,6 @@ fn fromJsonDepth(arena: Allocator, v: std.json.Value, depth: usize) Error!Value 
         },
     };
 }
-
-// ── textual rendering (Python `str()` / `repr()`) ────────────────────────────
 
 /// markupsafe's escape set, exactly: `&<>` plus **numeric** entities for the
 /// two quotes (`&#34;`/`&#39;`, not `&quot;`/`&#x27;`).

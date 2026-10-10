@@ -118,8 +118,13 @@ pub const Environment = struct {
     ) error{OutOfMemory}!Environment {
         var env: Environment = .{ .gpa = gpa, .options = options, .loader = template_loader };
         errdefer env.deinit();
-        for (filters_mod.builtin_filters) |e| try env.filters.put(gpa, e.name, e.func);
-        for (filters_mod.builtin_tests) |e| try env.tests.put(gpa, e.name, e.func);
+
+        for (filters_mod.builtin_filters) |e| {
+            try env.filters.put(gpa, e.name, e.func);
+        }
+        for (filters_mod.builtin_tests) |e| {
+            try env.tests.put(gpa, e.name, e.func);
+        }
         return env;
     }
 
@@ -176,6 +181,7 @@ pub const Environment = struct {
     ) Error![]u8 {
         var tmpl = try self.compile(source, diag);
         defer tmpl.deinit();
+
         return tmpl.render(gpa, context, diag);
     }
 
@@ -278,6 +284,7 @@ pub const Template = struct {
     ) RenderError![]u8 {
         var aw: Writer.Allocating = .init(gpa);
         errdefer aw.deinit();
+
         try self.renderTo(gpa, &aw.writer, context, diag);
         return aw.toOwnedSlice() catch error.OutOfMemory;
     }

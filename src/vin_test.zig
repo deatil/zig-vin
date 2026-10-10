@@ -128,10 +128,120 @@ test "DirLoader with json" {
     }
 
     {
+        var map: *vin.Namespace = try .create(a);
+        try map.set(a, "name", .fromString("test name"));
+        const ctx: vin.Value = .fromNamespace(map);
+
+        const out = try env.renderTemplateAlloc(a, "sub/show2", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[4222==test name]", out);
+    }
+
+    {
         const ctx = try vin.valueFrom(a, .{ .name = "test name", .vlans = [_]u16{ 10, 20 } });
 
         const out = try env.renderTemplateAlloc(a, "sub/show3", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name10,20,]", out);
     }
+
+    {
+        const map: vin.Map = try .create(a, &.{
+            try .create(a, "name", .fromString("test name")),
+        });
+        const ctx: vin.Value = .fromMap(map);
+
+        const out = try env.renderTemplateAlloc(a, "sub/show2", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[4222==test name]", out);
+    }
+}
+
+test "DirLoader create" {
+    const io = testing.io;
+    const alloc = testing.allocator;
+
+    var arena: std.heap.ArenaAllocator = .init(alloc);
+    defer arena.deinit();
+
+    const a = arena.allocator();
+
+    const dl: *vin.DirLoader = try .create(
+        a, io, 
+        try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}), 
+        .{ 
+            .suffix = ".htm",
+        },
+    );
+
+    var env = try vin.Environment.initWithLoader(a, .{}, dl.loader());
+    defer env.deinit();
+
+    {
+        const ctx = try vin.valueFrom(a, .{ .name = "test name", .vlans = [_]u16{ 10, 20 } });
+
+        const out = try env.renderTemplateAlloc(a, "sub/show3", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[4222==test name10,20,]", out);
+    }
+
+}
+
+test "MapLoader renderTemplateAlloc 2" {
+    const alloc = testing.allocator;
+
+    var arena: std.heap.ArenaAllocator = .init(alloc);
+    defer arena.deinit();
+
+    const a = arena.allocator();
+
+    var map: *vin.MapLoader = try .create(a, &.{
+        .{ .name = "base1",  .source = @embedFile("testdata/views/base1.htm") },
+        .{ .name = "sub/show5", .source = @embedFile("testdata/views/sub/show5.htm") },
+    });
+
+    var env = try vin.Environment.initWithLoader(a, .{}, map.loader());
+    defer env.deinit();
+
+    {
+        const ctx = try vin.valueFrom(a, .{
+            .name = "test name",
+        });
+        const out = try env.renderTemplateAlloc(a, "sub/show5", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[4222==test name]", out);
+    }
+}
+
+test "DirLoader create with Value create" {
+    const io = testing.io;
+    const alloc = testing.allocator;
+
+    var arena: std.heap.ArenaAllocator = .init(alloc);
+    defer arena.deinit();
+
+    const a = arena.allocator();
+
+    const dl: *vin.DirLoader = try .create(
+        a, io, 
+        try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}), 
+        .{ 
+            .suffix = ".htm",
+        },
+    );
+
+    var env = try vin.Environment.initWithLoader(a, .{}, dl.loader());
+    defer env.deinit();
+
+    {
+        const ctx = try vin.valueFrom(a, .{ 
+            .name = try vin.Value.create(a, .fromString("test name")), 
+            .vlans = [_]u16{ 10, 20 },
+        });
+
+        const out = try env.renderTemplateAlloc(a, "sub/show3", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[4222==test name10,20,]", out);
+    }
+
 }

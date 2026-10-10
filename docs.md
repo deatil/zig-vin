@@ -100,7 +100,7 @@ const ctx = try vin.valueFromJson(arena, parsed.value);
 
 // 3. Hand-built, when you want exact control (including markup-safe strings).
 const ctx: vin.Value = .{ .map = .{ .pairs = &.{
-    .{ .key = vin.Value.str("name"), .value = vin.Value.str("eth0") },
+    .{ .key = vin.Value.fromString("name"), .value = vin.Value.fromString("eth0") },
 } } };
 ```
 
@@ -120,7 +120,7 @@ fn fromYaml(arena: std.mem.Allocator, v: yaml.Value) !vin.Value {
         .bool => |b| .{ .boolean = b },
         .int => |i| .{ .integer = i },
         .float => |f| .{ .float = f },
-        .string => |s| vin.Value.str(s),
+        .string => |s| vin.Value.fromString(s),
         .sequence => |seq| blk: {
             const items = try arena.alloc(vin.Value, seq.len);
             for (seq, 0..) |e, i| items[i] = try fromYaml(arena, e);
@@ -317,7 +317,7 @@ try env.addFilter("netmask", struct {
         const bits = switch (input) { .integer => |i| i, else => return error.TypeMismatch };
         // ctx.arena is the render arena; ctx.toStr(v) honours the undefined policy.
         const s = try std.fmt.allocPrint(ctx.arena, "/{d}", .{bits});
-        return vin.Value.str(s);
+        return vin.Value.fromString(s);
     }
 }.f);
 ```

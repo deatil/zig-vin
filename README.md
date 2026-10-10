@@ -71,9 +71,7 @@ pub fn main(init: std.process.Init) !void {
     , null);
     defer tmpl.deinit();
 
-    var arena: std.heap.ArenaAllocator = .init(alloc);
-    defer arena.deinit();
-    const ctx = try vin.valueFrom(arena.allocator(), .{
+    const ctx = try vin.valueFrom(alloc, .{
         .host = "sw1",
         .interfaces = [_]struct {
             name: []const u8,
