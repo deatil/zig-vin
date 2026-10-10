@@ -72,15 +72,13 @@ pub const Options = struct {
     max_templates: usize = 256,
 };
 
-pub const GlobalFn = *const fn (ctx: *filters.Ctx, args: filters.Args) filters.Error!Value;
-
 /// How the renderer reaches the environment's filter/test registries without
 /// this file depending on the environment.
 pub const Lookup = struct {
     ctx: *const anyopaque,
     filter: *const fn (ctx: *const anyopaque, name: []const u8) ?filters.Fn,
     test_fn: *const fn (ctx: *const anyopaque, name: []const u8) ?filters.TestFn,
-    global: *const fn (ctx: *const anyopaque, name: []const u8) ?GlobalFn,
+    global: *const fn (ctx: *const anyopaque, name: []const u8) ?filters.GlobalFn,
     /// Where `{% extends %}`/`{% include %}`/`{% import %}` get their bytes.
     /// `null` makes every composition tag `error.NoLoader` — a template that
     /// names another template on an environment with no loader is a mistake

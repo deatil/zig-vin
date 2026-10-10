@@ -88,7 +88,7 @@ pub const FilterCtx = filters.Ctx;
 pub const FilterFn = filters.Fn;
 pub const TestFn = filters.TestFn;
 /// Global function authoring surface, for `Environment.addGlobal`.
-pub const GlobalFn = render_mod.GlobalFn;
+pub const GlobalFn = filters.GlobalFn;
 pub const FilterArgs = filters.Args;
 pub const FilterError = filters.Error;
 pub const FilterKwarg = filters.Kwarg;
