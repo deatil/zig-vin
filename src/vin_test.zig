@@ -265,6 +265,17 @@ fn greet2_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Valu
     return .{ .string = .{ .bytes = out, .safe = false } };
 }
 
+fn greet3_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Value {
+    const name_val = args.byName("name") orelse return error.BadArgument;
+    const tul_val = args.byName("tul") orelse return error.BadArgument;
+
+    const s = ctx.toStr(name_val) catch return error.BadArgument;
+    const t = ctx.toStr(tul_val) catch return error.BadArgument;
+
+    const out = try ctx.arena.print("fn2: {s},{s}", .{s, t});
+    return .{ .string = .{ .bytes = out, .safe = false } };
+}
+
 test "Env addGlobal" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
@@ -283,4 +294,23 @@ test "Env addGlobal" {
     const out = try tpl.render(alloc, ctx, null);
 
     try testing.expectEqualStrings("\\Alice=fn2: Blue,33", out);
+}
+
+test "Env addGlobal 2" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    try env.addGlobal("greet3", greet3_fn);
+
+    var tpl = try env.compile("<{{ greet3(tul=23678, name='Text') }}", null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("<fn2: Text,23678", out);
 }
