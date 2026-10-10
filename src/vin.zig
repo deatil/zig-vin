@@ -177,6 +177,7 @@ pub const Environment = struct {
             .ctx = self,
             .hasFilter = hasFilterThunk,
             .hasTest = hasTestThunk,
+            .hasGlobal = hasGlobalThunk,
         }, .{ .max_nesting_depth = self.options.max_nesting_depth }, d);
 
         return .{ .arena = arena, .parsed = parsed, .env = self };
@@ -205,8 +206,6 @@ pub const Environment = struct {
         if (self.loader) |loader| {
             const source = try loader.load(loader.ctx, gpa, tpl);
             if (source) |val| {
-                defer gpa.free(val);
-
                 const tmpl = try self.compile(val, diag);
                 return tmpl;
             }
@@ -236,6 +235,11 @@ pub const Environment = struct {
     fn hasTestThunk(ctx: *const anyopaque, name: []const u8) bool {
         const self: *const Environment = @ptrCast(@alignCast(ctx));
         return self.tests.contains(name);
+    }
+
+    fn hasGlobalThunk(ctx: *const anyopaque, name: []const u8) bool {
+        const self: *const Environment = @ptrCast(@alignCast(ctx));
+        return self.globals.contains(name);
     }
 
     fn filterLookup(ctx: *const anyopaque, name: []const u8) ?FilterFn {
@@ -273,6 +277,7 @@ pub const Environment = struct {
             .ctx = self,
             .hasFilter = hasFilterThunk,
             .hasTest = hasTestThunk,
+            .hasGlobal = hasGlobalThunk,
         }, .{ .max_nesting_depth = self.options.max_nesting_depth }, diag);
     }
 };

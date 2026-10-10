@@ -314,3 +314,25 @@ test "Env addGlobal 2" {
 
     try testing.expectEqualStrings("<fn2: Text,23678", out);
 }
+
+test "Env addGlobal fail" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    try env.addGlobal("greet3", greet3_fn);
+
+    var tpl = try env.compile("<{{ greet31(tul=23678, name='Text') }}", null);
+    defer tpl.deinit();
+
+    var diag: vin.Diagnostic = undefined;
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    _ = tpl.render(alloc, ctx, &diag) catch {};
+
+    const msg = try alloc.print("{f}", .{diag});
+    try testing.expectEqualStrings("line 1: 'greet31' is not callable", msg);
+}

@@ -46,6 +46,7 @@ pub const Registry = struct {
     ctx: *const anyopaque,
     hasFilter: *const fn (ctx: *const anyopaque, name: []const u8) bool,
     hasTest: *const fn (ctx: *const anyopaque, name: []const u8) bool,
+    hasGlobal: *const fn (ctx: *const anyopaque, name: []const u8) bool,
 };
 
 /// Tags the reference implementation has that this module deliberately does
