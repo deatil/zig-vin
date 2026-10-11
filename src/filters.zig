@@ -1,4 +1,5 @@
 const std = @import("std");
+const Io = std.Io;
 const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
 
@@ -31,6 +32,7 @@ pub const Args = struct {
 
 pub const Ctx = struct {
     arena: Allocator,
+    io: Io,
     autoescape: bool,
     strict: bool,
     user: *const anyopaque,
@@ -1497,6 +1499,7 @@ pub const builtin_tests = [_]TestEntry{
 /// turns into a message naming both.
 pub fn callMethod(
     arena: Allocator,
+    io: Io,
     obj: Value,
     name: []const u8,
     args: Args,
@@ -1504,6 +1507,7 @@ pub fn callMethod(
 ) Error!Value {
     var ctx: Ctx = .{
         .arena = arena,
+        .io = io,
         .autoescape = autoescape,
         .strict = true,
         .user = undefined,

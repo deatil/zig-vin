@@ -1,4 +1,5 @@
 const std = @import("std");
+const Io = std.Io;
 const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
 
@@ -76,7 +77,7 @@ pub const Outcome = union(enum) {
 
 /// Render `c` with this module. The JSON context goes in through
 /// `valueFromJson`, which is also the ingress path a real caller uses.
-pub fn renderCase(gpa: Allocator, c: Case) !Outcome {
+pub fn renderCase(gpa: Allocator, io: Io, c: Case) !Outcome {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
     const a = arena.allocator();
@@ -96,6 +97,7 @@ pub fn renderCase(gpa: Allocator, c: Case) !Outcome {
         .lstrip_blocks = c.lstrip_blocks,
         .keep_trailing_newline = c.keep_trailing_newline,
     }, map.loader());
+    env.withIo(io);
     defer env.deinit();
 
     var diag: vin.Diagnostic = .{};
@@ -120,8 +122,8 @@ pub fn refFromJson(v: std.json.Value) RefOutcome {
 }
 
 /// Compare one case, printing enough on failure to debug it without rerunning.
-pub fn expectMatch(gpa: Allocator, c: Case, ref: RefOutcome, label: []const u8) !void {
-    const mine = try renderCase(gpa, c);
+pub fn expectMatch(gpa: Allocator, io: Io, c: Case, ref: RefOutcome, label: []const u8) !void {
+    const mine = try renderCase(gpa, io, c);
     defer mine.deinit(gpa);
 
     if (!ref.ok) {

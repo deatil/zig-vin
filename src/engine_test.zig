@@ -5,7 +5,7 @@ const vin = @import("vin.zig");
 fn renderWith(gpa: std.mem.Allocator, opts: vin.Options, src: []const u8, ctx: vin.Value) ![]u8 {
     var env = try vin.Environment.init(gpa, opts);
     defer env.deinit();
-    return env.renderAlloc(gpa, src, ctx, null);
+    return env.renderAlloc(src, ctx, null);
 }
 
 test "valueFrom maps a Zig struct in field order" {
@@ -73,7 +73,7 @@ test "a composition tag without a loader is a named error, not a silent nothing"
         "{% extends 'x' %}{% block b %}{% endblock %}",
     }) |src| {
         var diag: vin.Diagnostic = .{};
-        const r = env.renderAlloc(gpa, src, .{ .map = .{ .pairs = &.{} } }, &diag);
+        const r = env.renderAlloc(src, .{ .map = .{ .pairs = &.{} } }, &diag);
         try testing.expectError(error.NoLoader, r);
         try testing.expect(std.mem.indexOf(u8, diag.message(), "no loader") != null);
     }
@@ -105,7 +105,7 @@ test "strict is the default undefined policy" {
     defer env.deinit();
     try testing.expectError(
         error.UndefinedValue,
-        env.renderAlloc(gpa, "{{ nope }}", .{ .map = .{ .pairs = &.{} } }, null),
+        env.renderAlloc("{{ nope }}", .{ .map = .{ .pairs = &.{} } }, null),
     );
 }
 
@@ -138,7 +138,7 @@ test "a caller can register its own filter and test" {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
     const ctx = try vin.valueFrom(arena.allocator(), .{ .bits = 24, .addr = "10.1.2.3" });
-    const out = try env.renderAlloc(gpa, "{{ bits|netmask }} {{ addr is private }}", ctx, null);
+    const out = try env.renderAlloc("{{ bits|netmask }} {{ addr is private }}", ctx, null);
     defer gpa.free(out);
     try testing.expectEqualStrings("255.255.255.0 True", out);
 }
@@ -184,7 +184,7 @@ test "a runaway render hits the output ceiling instead of the machine" {
     defer env.deinit();
     try testing.expectError(
         error.OutputTooLarge,
-        env.renderAlloc(gpa, "{% for i in range(100000) %}xxxxxxxxxx{% endfor %}", .{ .map = .{ .pairs = &.{} } }, null),
+        env.renderAlloc("{% for i in range(100000) %}xxxxxxxxxx{% endfor %}", .{ .map = .{ .pairs = &.{} } }, null),
     );
 }
 
@@ -194,7 +194,7 @@ test "range() refuses an absurd request rather than allocating it" {
     defer env.deinit();
     try testing.expectError(
         error.OutOfRange,
-        env.renderAlloc(gpa, "{{ range(100000000)|length }}", .{ .map = .{ .pairs = &.{} } }, null),
+        env.renderAlloc("{{ range(100000000)|length }}", .{ .map = .{ .pairs = &.{} } }, null),
     );
 }
 
@@ -203,7 +203,7 @@ test "the one-shot helper works with default options" {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
     const ctx = try vin.valueFrom(arena.allocator(), .{ .x = 1 });
-    const out = try vin.renderAlloc(gpa, "x={{ x }}", ctx, .{}, null);
+    const out = try vin.renderAlloc(gpa, "x={{ x }}", ctx, .{}, null, null);
     defer gpa.free(out);
     try testing.expectEqualStrings("x=1", out);
 }
@@ -267,7 +267,6 @@ test "a macro in an imported template can use a filter the CALLER registered" {
     }.f);
 
     const out = try env.renderAlloc(
-        gpa,
         "{% import 'macros' as m %}{{ m.cidr('10.0.0.0', '255.255.255.0') }}",
         .{ .map = .{ .pairs = &.{} } },
         null,
@@ -289,7 +288,7 @@ test "an unknown filter inside a LOADED template is still a resolution error" {
     var diag: vin.Diagnostic = .{};
     try testing.expectError(
         error.TemplateSyntaxError,
-        env.renderAlloc(gpa, "{% include 'bad' %}", .{ .map = .{ .pairs = &.{} } }, &diag),
+        env.renderAlloc("{% include 'bad' %}", .{ .map = .{ .pairs = &.{} } }, &diag),
     );
     try testing.expect(std.mem.indexOf(u8, diag.message(), "bad") != null);
     try testing.expect(std.mem.indexOf(u8, diag.message(), "unknown filter") != null);

@@ -22,7 +22,7 @@ test "replay: every recorded case matches the reference's output byte for byte" 
     var failures: usize = 0;
     for (cases) |entry| {
         const c = try conform.caseFromJson(arena.allocator(), entry);
-        conform.expectMatch(gpa, c, conform.refFromJson(entry), "replay") catch {
+        conform.expectMatch(gpa, testing.io, c, conform.refFromJson(entry), "replay") catch {
             failures += 1;
         };
     }

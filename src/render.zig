@@ -1,4 +1,5 @@
 const std = @import("std");
+const Io = std.Io;
 const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
 
@@ -139,6 +140,7 @@ const BlockFrame = struct {
 
 pub fn render(
     arena: Allocator,
+    io: Io,
     parsed: ast.Parsed,
     context: Value,
     opts: Options,
@@ -149,6 +151,7 @@ pub fn render(
     var counting: Counting = .{ .inner = out, .limit = opts.max_output_bytes };
     var r: Renderer = .{
         .arena = arena,
+        .io = io,
         .opts = opts,
         .lookup = lookup,
         .out = &counting,
@@ -178,6 +181,7 @@ const Counting = struct {
 
 const Renderer = struct {
     arena: Allocator,
+    io: Io,
     opts: Options,
     lookup: Lookup,
     out: *Counting,
@@ -1043,6 +1047,7 @@ const Renderer = struct {
     fn filterCtx(self: *Renderer) filters.Ctx {
         return .{
             .arena = self.arena,
+            .io = self.io,
             .autoescape = self.opts.autoescape,
             .strict = self.opts.undefined_policy == .strict,
             .user = self,
@@ -1337,7 +1342,7 @@ const Renderer = struct {
                 return .{ .boolean = false };
             }
         }
-        return filters.callMethod(self.arena, obj, name, args, self.opts.autoescape) catch |err| switch (err) {
+        return filters.callMethod(self.arena, self.io, obj, name, args, self.opts.autoescape) catch |err| switch (err) {
             error.Unsupported => self.fail(line, "'{s}' objects have no method '{s}' in this module", .{ obj.typeName(), name }, error.NotCallable),
             else => |other| other,
         };

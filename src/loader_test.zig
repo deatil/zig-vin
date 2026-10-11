@@ -115,14 +115,14 @@ test "a template cannot escape the root through a name taken from the context" {
     var diag: vin.Diagnostic = .{};
     try testing.expectError(
         error.LoaderFailed,
-        env.renderAlloc(gpa, "{% include theme %}", ctx, &diag),
+        env.renderAlloc("{% include theme %}", ctx, &diag),
     );
     try testing.expect(std.mem.indexOf(u8, diag.message(), "refused") != null);
 
     var diag2: vin.Diagnostic = .{};
     try testing.expectError(
         error.LoaderFailed,
-        env.renderAlloc(gpa, "{% include theme ignore missing %}", ctx, &diag2),
+        env.renderAlloc("{% include theme ignore missing %}", ctx, &diag2),
     );
 }
 
@@ -295,7 +295,7 @@ test "the caps are configurable and the error names the limit" {
     var diag: vin.Diagnostic = .{};
     try testing.expectError(
         error.TooDeep,
-        env.renderAlloc(gpa, "{% include 'a' %}", .{ .map = .{ .pairs = &.{} } }, &diag),
+        env.renderAlloc("{% include 'a' %}", .{ .map = .{ .pairs = &.{} } }, &diag),
     );
     try testing.expect(std.mem.indexOf(u8, diag.message(), "4") != null);
 }
@@ -310,7 +310,7 @@ test "a legitimate deep chain still renders — the cap is not just 'no nesting'
     } };
     var env = try vin.Environment.initWithLoader(gpa, .{}, map.loader());
     defer env.deinit();
-    const out = try env.renderAlloc(gpa, "[{% include 'l1' %}]", .{ .map = .{ .pairs = &.{} } }, null);
+    const out = try env.renderAlloc("[{% include 'l1' %}]", .{ .map = .{ .pairs = &.{} } }, null);
     defer gpa.free(out);
     try testing.expectEqualStrings("[1234]", out);
 }
@@ -321,7 +321,6 @@ test "a template included in a loop is loaded and compiled once" {
     var env = try vin.Environment.initWithLoader(gpa, .{}, map.loader());
     defer env.deinit();
     const out = try env.renderAlloc(
-        gpa,
         "{% for i in range(5) %}{% include 'row' %}{% endfor %}",
         .{ .map = .{ .pairs = &.{} } },
         null,

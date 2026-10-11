@@ -1,4 +1,5 @@
 const std = @import("std");
+const Io = std.Io;
 const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
 
@@ -97,6 +98,7 @@ pub const FilterKwarg = filters.Kwarg;
 /// an environment must outlive the templates compiled from it.
 pub const Environment = struct {
     gpa: Allocator,
+    io: Io = std.Options.debug_io,
     options: Options,
     filters: std.StringHashMapUnmanaged(FilterFn) = .empty,
     tests: std.StringHashMapUnmanaged(TestFn) = .empty,
@@ -138,6 +140,10 @@ pub const Environment = struct {
         self.* = undefined;
     }
 
+    pub fn withIo(self: *Environment, io: Io) void {
+        self.io = io;
+    }
+
     /// Register (or replace) a filter. `name` is borrowed and must outlive the
     /// environment.
     pub fn addFilter(self: *Environment, name: []const u8, func: FilterFn) error{OutOfMemory}!void {
@@ -157,13 +163,18 @@ pub const Environment = struct {
     /// Parse `source` into a reusable `Template`. The template copies the
     /// source, so `source` need not outlive the call. `diag` (optional) is
     /// filled in on `error.TemplateSyntaxError`.
-    pub fn compile(self: *const Environment, source: []const u8, diag: ?*Diagnostic) CompileError!Template {
+    pub fn compile(
+        self: *const Environment, 
+        source: []const u8, 
+        diag: ?*Diagnostic,
+    ) CompileError!Template {
         var scratch: Diagnostic = .{};
         const d = diag orelse &scratch;
 
         var arena: std.heap.ArenaAllocator = .init(self.gpa);
         errdefer arena.deinit();
         const a = arena.allocator();
+
         const owned = try a.dupe(u8, source);
 
         const lexed = lexer.lex(a, owned, .{
@@ -179,13 +190,17 @@ pub const Environment = struct {
             .hasGlobal = hasGlobalThunk,
         }, .{ .max_nesting_depth = self.options.max_nesting_depth }, d);
 
-        return .{ .arena = arena, .parsed = parsed, .env = self };
+        return .{ 
+            .arena = arena, 
+            .io = self.io,
+            .parsed = parsed, 
+            .env = self,
+        };
     }
 
     /// Compile and render in one step, for the one-shot case.
     pub fn renderAlloc(
         self: *const Environment,
-        gpa: Allocator,
         source: []const u8,
         context: Value,
         diag: ?*Diagnostic,
@@ -193,17 +208,16 @@ pub const Environment = struct {
         var tmpl = try self.compile(source, diag);
         defer tmpl.deinit();
 
-        return tmpl.render(gpa, context, diag);
+        return tmpl.render(self.gpa, context, diag);
     }
 
     pub fn compileTemplate(
         self: *const Self,
-        gpa: Allocator,
         tpl: []const u8,
         diag: ?*Diagnostic,
     ) !Template {
         if (self.loader) |loader| {
-            const source = try loader.load(loader.ctx, gpa, tpl);
+            const source = try loader.load(loader.ctx, self.gpa, tpl);
             if (source) |val| {
                 const tmpl = try self.compile(val, diag);
                 return tmpl;
@@ -215,15 +229,14 @@ pub const Environment = struct {
 
     pub fn renderTemplateAlloc(
         self: *const Self,
-        gpa: Allocator,
         tpl: []const u8,
         context: Value,
         diag: ?*Diagnostic,
     ) ![]u8 {
-        var tmpl = try self.compileTemplate(gpa, tpl, diag);
+        var tmpl = try self.compileTemplate(tpl, diag);
         defer tmpl.deinit();
 
-        return tmpl.render(gpa, context, diag);
+        return tmpl.render(self.gpa, context, diag);
     }
 
     fn hasFilterThunk(ctx: *const anyopaque, name: []const u8) bool {
@@ -267,11 +280,13 @@ pub const Environment = struct {
         diag: *Diagnostic,
     ) parser.Error!ast.Parsed {
         const self: *const Environment = @ptrCast(@alignCast(ctx));
+
         const lexed = try lexer.lex(arena, source, .{
             .trim_blocks = self.options.trim_blocks,
             .lstrip_blocks = self.options.lstrip_blocks,
             .keep_trailing_newline = self.options.keep_trailing_newline,
         }, diag);
+
         return parser.parse(arena, lexed.pieces, .{
             .ctx = self,
             .hasFilter = hasFilterThunk,
@@ -287,6 +302,7 @@ pub const Environment = struct {
 /// (each render allocates its own scratch arena).
 pub const Template = struct {
     arena: std.heap.ArenaAllocator,
+    io: Io,
     parsed: ast.Parsed,
     env: *const Environment,
 
@@ -320,13 +336,16 @@ pub const Template = struct {
     ) RenderError!void {
         var scratch: Diagnostic = .{};
         const d = diag orelse &scratch;
+
         var arena: std.heap.ArenaAllocator = .init(gpa);
         defer arena.deinit();
+
         var budget: RenderBudget = .{
             .parent = arena.allocator(),
             .remaining = self.env.options.max_render_bytes,
         };
-        render_mod.render(budget.allocator(), self.parsed, context, .{
+
+        render_mod.render(budget.allocator(), self.io, self.parsed, context, .{
             .autoescape = self.env.options.autoescape,
             .undefined_policy = self.env.options.undefined_policy,
             .max_output_bytes = self.env.options.max_output_bytes,
@@ -410,11 +429,17 @@ pub fn renderAlloc(
     source: []const u8,
     context: Value,
     options: Options,
+    io: ?Io,
     diag: ?*Diagnostic,
 ) Error![]u8 {
     var env = try Environment.init(gpa, options);
     defer env.deinit();
-    return env.renderAlloc(gpa, source, context, diag);
+
+    if (io) |now_io| {
+        env.withIo(now_io);
+    }
+
+    return env.renderAlloc(source, context, diag);
 }
 
 test {

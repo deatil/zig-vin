@@ -26,13 +26,13 @@ test "DirLoader use dir" {
     defer env.deinit();
 
     {
-        const out = try env.renderTemplateAlloc(a, "show", .none, null);
+        const out = try env.renderTemplateAlloc("show", .none, null);
         defer a.free(out);
         try testing.expectEqualStrings("[42]", out);
     }
 
     {
-        const out = try env.renderTemplateAlloc(a, "sub/show1", .none, null);
+        const out = try env.renderTemplateAlloc("sub/show1", .none, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222]", out);
     }
@@ -41,7 +41,7 @@ test "DirLoader use dir" {
         const ctx = try vin.valueFrom(a, .{
             .name = "test name",
         });
-        const out = try env.renderTemplateAlloc(a, "sub/show2", ctx, null);
+        const out = try env.renderTemplateAlloc("sub/show2", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
@@ -66,13 +66,13 @@ test "MapLoader renderTemplateAlloc" {
     defer env.deinit();
 
     {
-        const out = try env.renderTemplateAlloc(a, "show", .none, null);
+        const out = try env.renderTemplateAlloc("show", .none, null);
         defer a.free(out);
         try testing.expectEqualStrings("[42]", out);
     }
 
     {
-        const out = try env.renderTemplateAlloc(a, "sub/show1", .none, null);
+        const out = try env.renderTemplateAlloc("sub/show1", .none, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222]", out);
     }
@@ -81,7 +81,7 @@ test "MapLoader renderTemplateAlloc" {
         const ctx = try vin.valueFrom(a, .{
             .name = "test name",
         });
-        const out = try env.renderTemplateAlloc(a, "sub/show2", ctx, null);
+        const out = try env.renderTemplateAlloc("sub/show2", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
@@ -114,7 +114,7 @@ test "DirLoader with json" {
         const parsed = try std.json.parseFromSlice(std.json.Value, a, text, .{});
         const ctx = try vin.valueFromJson(a, parsed.value);
 
-        const out = try env.renderTemplateAlloc(a, "sub/show2", ctx, null);
+        const out = try env.renderTemplateAlloc("sub/show2", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
@@ -124,7 +124,7 @@ test "DirLoader with json" {
         try map.set(a, "name", vin.Value.fromString("test name"));
         const ctx: vin.Value = .fromNamespace(&map);
 
-        const out = try env.renderTemplateAlloc(a, "sub/show2", ctx, null);
+        const out = try env.renderTemplateAlloc("sub/show2", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
@@ -134,7 +134,7 @@ test "DirLoader with json" {
         try map.set(a, "name", .fromString("test name"));
         const ctx: vin.Value = .fromNamespace(map);
 
-        const out = try env.renderTemplateAlloc(a, "sub/show2", ctx, null);
+        const out = try env.renderTemplateAlloc("sub/show2", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
@@ -142,7 +142,7 @@ test "DirLoader with json" {
     {
         const ctx = try vin.valueFrom(a, .{ .name = "test name", .vlans = [_]u16{ 10, 20 } });
 
-        const out = try env.renderTemplateAlloc(a, "sub/show3", ctx, null);
+        const out = try env.renderTemplateAlloc("sub/show3", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name10,20,]", out);
     }
@@ -153,7 +153,7 @@ test "DirLoader with json" {
         });
         const ctx: vin.Value = .fromMap(map);
 
-        const out = try env.renderTemplateAlloc(a, "sub/show2", ctx, null);
+        const out = try env.renderTemplateAlloc("sub/show2", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
@@ -182,7 +182,7 @@ test "DirLoader create" {
     {
         const ctx = try vin.valueFrom(a, .{ .name = "test name", .vlans = [_]u16{ 10, 20 } });
 
-        const out = try env.renderTemplateAlloc(a, "sub/show3", ctx, null);
+        const out = try env.renderTemplateAlloc("sub/show3", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name10,20,]", out);
     }
@@ -209,7 +209,7 @@ test "MapLoader renderTemplateAlloc 2" {
         const ctx = try vin.valueFrom(a, .{
             .name = "test name",
         });
-        const out = try env.renderTemplateAlloc(a, "sub/show5", ctx, null);
+        const out = try env.renderTemplateAlloc("sub/show5", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
@@ -240,7 +240,7 @@ test "DirLoader create with Value create" {
             .vlans = [_]u16{ 10, 20 },
         });
 
-        const out = try env.renderTemplateAlloc(a, "sub/show3", ctx, null);
+        const out = try env.renderTemplateAlloc("sub/show3", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name10,20,]", out);
     }
@@ -337,4 +337,40 @@ test "Env addGlobal fail" {
 
     const msg = try alloc.print("{f}", .{diag});
     try testing.expectEqualStrings("line 1: 'greet31' is not callable", msg);
+}
+
+fn greet_io_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Value {
+    const name_val = args.byName("name") orelse return error.BadArgument;
+    const tul_val = args.byName("tul") orelse return error.BadArgument;
+
+    const s = ctx.toStr(name_val) catch return error.BadArgument;
+    const t = ctx.toStr(tul_val) catch return error.BadArgument;
+
+    const io = ctx.io;
+    const ts = std.Io.Timestamp.now(io, .real).toNanoseconds();
+    const ts2 = @divTrunc(ts, 100000000 * 10000000);
+
+    const out = try ctx.arena.print("fn2: {s},{s},{d}", .{s, t, ts2});
+    return .{ .string = .{ .bytes = out, .safe = false } };
+}
+
+test "Env addGlobal with io" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    env.withIo(testing.io);
+
+    try env.addGlobal("greet_io", greet_io_fn);
+
+    var tpl = try env.compile("<{{ greet_io(tul=23678, name='Text') }}", null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("<fn2: Text,23678,1791", out);
 }
