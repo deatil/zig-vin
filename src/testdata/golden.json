@@ -1842,6 +1842,48 @@
    "trim_blocks": false
   },
   {
+    "autoescape": false,
+    "context": "{\"l\": [1,2,3,4,5]}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "for_loop_join",
+    "out": "1|2|3|4|5",
+    "status": "ok",
+    "strict": false,
+    "template": "{% for x in l %}{{ loop.join('|') }}{{x}}{% endfor %}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
+    "context": "{\"l\": [1,2,3,4,5]}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "for_loop_cycle2",
+    "out": "odd even odd even odd ",
+    "status": "ok",
+    "strict": false,
+    "template": "{% for x in l %}{{ cycler('odd','even') }} {% endfor %}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
+    "context": "{\"l\": [1,2,3,4,5]}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "for_loop_join2",
+    "out": "1|2|3|4|5",
+    "status": "ok",
+    "strict": false,
+    "template": "{% for x in l %}{{ joiner('|') }}{{x}}{% endfor %}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
    "autoescape": false,
    "context": "{\"l\": [1,1,2,2,1]}",
    "expect_error": false,

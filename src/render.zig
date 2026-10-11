@@ -45,8 +45,7 @@ pub const Error = value.Error || error{
 
 pub const UndefinedPolicy = enum {
     /// Any *use* of an undefined value is an error, including rendering it.
-    /// The default here, and a deliberate divergence from the reference — see
-    /// README.md and SPEC.md §4.
+    /// The default here, and a deliberate divergence from the reference
     strict,
     /// The reference implementation's default `Undefined`: renders as the empty
     /// string and is falsey, but errors on attribute access, iteration and
@@ -1104,11 +1103,17 @@ const Renderer = struct {
             if (std.mem.eql(u8, name, "range")) return self.globalRange(args, c.line);
             if (std.mem.eql(u8, name, "dict")) return self.globalDict(args);
             if (std.mem.eql(u8, name, "namespace")) return self.globalNamespace(args);
-            if (std.mem.eql(u8, name, "lipsum") or std.mem.eql(u8, name, "cycler") or std.mem.eql(u8, name, "joiner"))
-                return self.fail(c.line, "global '{s}' is not implemented (see SPEC.md)", .{name}, error.NotCallable);
+
+            if (std.mem.eql(u8, name, "cycler")) return self.globalCycler(args);
+            if (std.mem.eql(u8, name, "joiner")) return self.globalJoiner(args);
+            if (std.mem.eql(u8, name, "lipsum")) {
+                return self.fail(c.line, "global '{s}' is not implemented", .{name}, error.NotCallable);
+            }
+
             return self.fail(c.line, "'{s}' is not callable", .{name}, error.NotCallable);
         }
-        return self.fail(c.line, "only the built-in globals are callable in this module (see SPEC.md)", .{}, error.NotCallable);
+
+        return self.fail(c.line, "only the built-in globals are callable in this module", .{}, error.NotCallable);
     }
 
     fn globalRange(self: *Renderer, args: filters.Args, line: usize) Error!Value {
@@ -1175,6 +1180,31 @@ const Renderer = struct {
         }
         for (args.kw) |k| try ns.set(self.arena, k.name, k.value);
         return .{ .namespace = ns };
+    }
+
+    fn globalCycler(self: *Renderer, args: filters.Args) Error!Value {
+        if (args.pos.len == 0) return error.BadArgument;
+        const items = args.pos;
+        const lv = self.resolve("loop");
+        if (lv == .loop) {
+            const idx = lv.loop.index0;
+            const n: usize = items.len;
+            if (n == 0) return error.BadArgument;
+            return items[idx % n];
+        }
+
+        return items[0];
+    }
+
+    fn globalJoiner(self: *Renderer, args: filters.Args) Error!Value {
+        const sep_v = args.get(0, "sep") orelse Value.empty_string;
+        const lv = self.resolve("loop");
+        if (lv == .loop) {
+            if (lv.loop.index0 == 0) return Value.empty_string;
+            return sep_v;
+        }
+
+        return Value.empty_string;
     }
 
     // ── attribute / item / method access ────────────────────────────────────
@@ -1289,6 +1319,14 @@ const Renderer = struct {
                 if (args.pos.len == 0) return error.BadArgument;
                 return args.pos[l.index0 % args.pos.len];
             }
+
+            if (std.mem.eql(u8, name, "join")) {
+                if (args.pos.len == 0) return error.BadArgument;
+                if (l.index0 == 0) return Value.empty_string;
+                const sep_v = args.get(0, "sep") orelse Value.empty_string;
+                return sep_v;
+            }
+
             if (std.mem.eql(u8, name, "changed")) {
                 const prev = l.last_changed;
                 const now = try self.arena.dupe(Value, args.pos);
@@ -1300,7 +1338,7 @@ const Renderer = struct {
             }
         }
         return filters.callMethod(self.arena, obj, name, args, self.opts.autoescape) catch |err| switch (err) {
-            error.Unsupported => self.fail(line, "'{s}' objects have no method '{s}' in this module (see SPEC.md)", .{ obj.typeName(), name }, error.NotCallable),
+            error.Unsupported => self.fail(line, "'{s}' objects have no method '{s}' in this module", .{ obj.typeName(), name }, error.NotCallable),
             else => |other| other,
         };
     }

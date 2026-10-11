@@ -202,7 +202,7 @@ const Parser = struct {
             return;
         }
         for (unimplemented_tags) |t| if (std.mem.eql(u8, t, kw.text)) {
-            return self.failAt(line, "tag is recognised but not implemented by this module (see SPEC.md's divergence table)");
+            return self.failAt(line, "tag is recognised but not implemented by this module");
         };
         return self.failAt(line, "unknown tag");
     }
@@ -1037,7 +1037,7 @@ const Stream = struct {
                 _ = try self.expect(.comma, line, "expected `,` between arguments");
             if (self.eat(.rparen)) break;
             if (self.peek() != null and (self.peek().?.kind == .mul or self.peek().?.kind == .pow))
-                return self.p.failAt(line, "`*args`/`**kwargs` are not implemented (see SPEC.md)");
+                return self.p.failAt(line, "`*args`/`**kwargs` are not implemented");
             const t = self.peek() orelse return self.p.failAt(line, "unterminated argument list");
             if (t.kind == .name and self.peekAt(1) != null and self.peekAt(1).?.kind == .assign) {
                 self.i += 2;

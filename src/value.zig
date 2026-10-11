@@ -13,8 +13,7 @@ pub const Error = error{
     OutOfRange,
     /// A filter/test/method argument was wrong in kind or count.
     BadArgument,
-    /// Reached a corner this engine deliberately does not implement; the
-    /// divergence table in SPEC.md names every one.
+    /// Reached a corner this engine deliberately does not implement.
     Unsupported,
 };
 
@@ -722,7 +721,7 @@ fn repeatTuple(arena: Allocator, l: []const Value, times: i64) Error!Value {
 
 /// Guardrails on the two operations that can multiply memory from a template
 /// literal (`'x' * n`, `range(n)`), so a hostile template cannot exhaust the
-/// arena in one expression. Documented in SPEC.md §6.
+/// arena in one expression.
 pub const max_alloc: usize = 1 << 26;
 pub const max_items: usize = 1 << 22;
 

@@ -53,13 +53,7 @@ const vin = @import("zig-vin");
 pub fn main(init: std.process.Init) !void {
     const alloc = init.arena.allocator();
 
-    var env = try vin.Environment.init(alloc, .{
-        .trim_blocks = true,
-        .lstrip_blocks = true,
-    });
-    defer env.deinit();
-
-    var tmpl = try env.compile(
+    const tpl = 
         \\hostname {{ host }}
         \\!
         \\{% for i in interfaces %}
@@ -68,8 +62,7 @@ pub fn main(init: std.process.Init) !void {
         \\ {{ 'shutdown' if i.shutdown else 'no shutdown' }}
         \\!
         \\{% endfor %}
-    , null);
-    defer tmpl.deinit();
+    ;
 
     const ctx = try vin.valueFrom(alloc, .{
         .host = "sw1",
@@ -83,7 +76,55 @@ pub fn main(init: std.process.Init) !void {
         },
     });
 
-    const out = try tmpl.render(alloc, ctx, null);
+    var env = try vin.Environment.init(alloc, .{
+        .trim_blocks = true,
+        .lstrip_blocks = true,
+    });
+    defer env.deinit();
+
+    const out = try env.renderAlloc(alloc, tpl, ctx, null);
+    defer alloc.free(out);
+}
+~~~
+
+
+### Use DirLoader
+
+~~~zig
+const std = @import("std");
+const vin = @import("zig-vin");
+
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    const alloc = init.arena.allocator();
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .host = "sw1",
+        .interfaces = [_]struct {
+            name: []const u8,
+            address: []const u8,
+            mask: []const u8,
+            shutdown: bool,
+        }{
+            .{ .name = "Gi0/1", .address = "196.56.0.1", .mask = "255.255.255.0", .shutdown = false },
+        },
+    });
+
+    const dl: *vin.DirLoader = try .create(
+        a, io, 
+        try std.Io.Dir.cwd().openDir(io, "views", .{}), 
+        .{ 
+            .suffix = ".htm",
+        },
+    );
+
+    var env = try vin.Environment.initWithLoader(alloc, .{
+        .trim_blocks = true,
+        .lstrip_blocks = true,
+    }, dl.loader());
+    defer env.deinit();
+
+    const out = try env.renderTemplateAlloc(alloc, tpl, ctx, null);
     defer alloc.free(out);
 }
 ~~~

@@ -23,8 +23,7 @@ pub const Undefined = value.Undefined;
 /// Build a `Value` from ordinary Zig data — structs become ordered maps in
 /// field order, `[]const u8` becomes a string, slices become lists.
 pub const valueFrom = value.from;
-/// Adapter for `std.json.Value`. See SPEC.md §2 for why this, and not a
-/// dependency on the `yaml` module, is the shipped adapter.
+/// Adapter for `std.json.Value`.
 pub const valueFromJson = value.fromJson;
 /// markupsafe's escape set, exposed because callers registering their own
 /// filters need exactly it.
@@ -197,7 +196,7 @@ pub const Environment = struct {
         return tmpl.render(gpa, context, diag);
     }
 
-    pub fn renderTemplate(
+    pub fn compileTemplate(
         self: *const Self,
         gpa: Allocator,
         tpl: []const u8,
@@ -221,7 +220,7 @@ pub const Environment = struct {
         context: Value,
         diag: ?*Diagnostic,
     ) ![]u8 {
-        var tmpl = try self.renderTemplate(gpa, tpl, diag);
+        var tmpl = try self.compileTemplate(gpa, tpl, diag);
         defer tmpl.deinit();
 
         return tmpl.render(gpa, context, diag);

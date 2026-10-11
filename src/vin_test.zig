@@ -331,7 +331,9 @@ test "Env addGlobal fail" {
     var diag: vin.Diagnostic = undefined;
 
     const ctx = try vin.valueFrom(alloc, .{});
-    _ = tpl.render(alloc, ctx, &diag) catch {};
+    const out = tpl.render(alloc, ctx, &diag);
+
+    try testing.expectError(error.NotCallable, out);
 
     const msg = try alloc.print("{f}", .{diag});
     try testing.expectEqualStrings("line 1: 'greet31' is not callable", msg);

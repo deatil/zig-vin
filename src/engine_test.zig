@@ -705,7 +705,7 @@ test "a render's total work is bounded, not just its depth and its steps" {
 
 test "F-B3: quadratic namespace-concat accumulation is bounded, not just documented" {
     const gpa = testing.allocator;
-    // SPEC.md §8 names this shape explicitly: `{% set ns.s = ns.s ~ 'x' %}` is
+    // names this shape explicitly: `{% set ns.s = ns.s ~ 'x' %}` is
     // O(n²) *memory* here (the reference's refcounted string is O(n)) because
     // the render arena never reclaims the discarded intermediate copies.
     // 8192 iterations of a 1-byte-per-step accumulation allocate roughly
