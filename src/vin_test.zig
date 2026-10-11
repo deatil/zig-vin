@@ -159,6 +159,42 @@ test "DirLoader with json" {
     }
 }
 
+test "DirLoader with json 2" {
+    const io = testing.io;
+    const alloc = testing.allocator;
+
+    var arena: std.heap.ArenaAllocator = .init(alloc);
+    defer arena.deinit();
+
+    const a = arena.allocator();
+
+    var env = try vin.Environment.init(a, .{});
+    defer env.deinit();
+
+    const dl: vin.DirLoader = .{ 
+        .io = io, 
+        .root = try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}), 
+        .options = .{ 
+            .suffix = ".htm",
+        },
+    };
+
+    env.withLoader(dl.loader());
+
+    {
+        const text = 
+            \\{"name": "test name"}
+        ;
+        const parsed = try std.json.parseFromSlice(std.json.Value, a, text, .{});
+        const ctx = try vin.valueFromJson(a, parsed.value);
+
+        const out = try env.renderTemplateAlloc("sub/show2", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[4222==test name]", out);
+    }
+
+}
+
 test "DirLoader create" {
     const io = testing.io;
     const alloc = testing.allocator;

@@ -140,6 +140,11 @@ pub const Environment = struct {
         self.* = undefined;
     }
 
+    pub fn withLoader(self: *Environment, template_loader: Loader) void {
+        self.loader = template_loader;
+    }
+
+    // when need io, this must set.
     pub fn withIo(self: *Environment, io: Io) void {
         self.io = io;
     }
