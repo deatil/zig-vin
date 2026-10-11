@@ -347,8 +347,8 @@ fn greet_io_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Va
     const t = ctx.toStr(tul_val) catch return error.BadArgument;
 
     const io = ctx.io;
-    const ts = std.Io.Timestamp.now(io, .real).toNanoseconds();
-    const ts2 = @divTrunc(ts, 100000000 * 10000000);
+    const ts = std.Io.Timestamp.now(io, .real).toSeconds();
+    const ts2 = @divTrunc(ts, 1000000);
 
     const out = try ctx.arena.print("fn2: {s},{s},{d}", .{s, t, ts2});
     return .{ .string = .{ .bytes = out, .safe = false } };
