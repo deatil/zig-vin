@@ -428,23 +428,27 @@ const RenderBudget = struct {
     }
 };
 
+pub const RenderOpts = struct {
+    options: Options = .{},
+    io: ?Io = null,
+    diag: ?*Diagnostic = null,
+};
+
 /// The one-liner: default options, compile and render, caller owns the result.
-pub fn renderAlloc(
+pub fn render(
     gpa: Allocator,
     source: []const u8,
     context: Value,
-    options: Options,
-    io: ?Io,
-    diag: ?*Diagnostic,
+    opts: RenderOpts,
 ) Error![]u8 {
-    var env = try Environment.init(gpa, options);
+    var env = try Environment.init(gpa, opts.options);
     defer env.deinit();
 
-    if (io) |now_io| {
+    if (opts.io) |now_io| {
         env.withIo(now_io);
     }
 
-    return env.renderAlloc(source, context, diag);
+    return env.renderAlloc(source, context, opts.diag);
 }
 
 test {

@@ -203,7 +203,7 @@ test "the one-shot helper works with default options" {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
     const ctx = try vin.valueFrom(arena.allocator(), .{ .x = 1 });
-    const out = try vin.renderAlloc(gpa, "x={{ x }}", ctx, .{}, null, null);
+    const out = try vin.render(gpa, "x={{ x }}", ctx, .{});
     defer gpa.free(out);
     try testing.expectEqualStrings("x=1", out);
 }
