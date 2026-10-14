@@ -429,8 +429,6 @@ test "Env addMethod" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    env.withIo(testing.io);
-
     try env.addMethod("addString", addString_fn);
 
     var tpl = try env.compile("<>{{ str.addString(name='Text') }}", null);
@@ -442,4 +440,40 @@ test "Env addMethod" {
     const out = try tpl.render(alloc, ctx, null);
 
     try testing.expectEqualStrings("<>addstr: Text,user", out);
+}
+
+fn cy_set_fn(ctx: *vin.FilterCtx, input: value.Value, args: vin.FilterArgs) filters.Error!value.Value {
+    const name_val = args.byName("name") orelse return error.BadArgument;
+
+    if (input != .namespace) return error.TypeMismatch;
+
+    const ns = input.namespace;
+    try ns.set(ctx.arena, "foo", name_val);
+    return .empty_string;
+}
+
+test "Env addMethod set" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    try env.addMethod("cy_set", cy_set_fn);
+
+    var tpl = try env.compile("{{ data.cy_set(name='Text') }}<>{{data}}", null);
+    defer tpl.deinit();
+
+    var map: vin.value.Namespace = .{};
+    try map.set(alloc, "foo", .fromString("val"));
+
+    const data: vin.Value = .fromNamespace(&map);
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .data = data,
+    });
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("<>{'foo': 'Text'}", out);
 }

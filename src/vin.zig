@@ -83,7 +83,7 @@ pub const CompileError = parser.Error;
 pub const RenderError = render_mod.Error;
 pub const Error = CompileError || RenderError;
 
-/// Filter/test authoring surface, for `Environment.addFilter`/`addTest`/`addGlobal`.
+/// Filter/test authoring surface, for `Environment.addFilter`/`addTest`/`addGlobal`/`addMethod`.
 pub const FilterCtx = filters.Ctx;
 pub const FilterFn = filters.Fn;
 pub const TestFn = filters.TestFn;
