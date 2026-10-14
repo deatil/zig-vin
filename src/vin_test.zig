@@ -410,3 +410,36 @@ test "Env addGlobal with io" {
 
     try testing.expectEqualStrings("<fn2: Text,23678,1791", out);
 }
+
+fn addString_fn(ctx: *vin.FilterCtx, input: value.Value, args: vin.FilterArgs) filters.Error!value.Value {
+    const name_val = args.byName("name") orelse return error.BadArgument;
+    const n = ctx.toStr(name_val) catch return error.BadArgument;
+
+    const in = ctx.toStr(input) catch return error.BadArgument;
+
+    const out = try ctx.arena.print("addstr: {s},{s}", .{n, in});
+    return .{ .string = .{ .bytes = out, .safe = false } };
+}
+
+test "Env addMethod" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    env.withIo(testing.io);
+
+    try env.addMethod("addString", addString_fn);
+
+    var tpl = try env.compile("<>{{ str.addString(name='Text') }}", null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .str = "user",
+    });
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("<>addstr: Text,user", out);
+}

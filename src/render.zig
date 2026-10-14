@@ -79,6 +79,7 @@ pub const Lookup = struct {
     filter: *const fn (ctx: *const anyopaque, name: []const u8) ?filters.Fn,
     test_fn: *const fn (ctx: *const anyopaque, name: []const u8) ?filters.TestFn,
     global: *const fn (ctx: *const anyopaque, name: []const u8) ?filters.GlobalFn,
+    method: *const fn (ctx: *const anyopaque, name: []const u8) ?filters.MethodFn,
     /// Where `{% extends %}`/`{% include %}`/`{% import %}` get their bytes.
     /// `null` makes every composition tag `error.NoLoader` — a template that
     /// names another template on an environment with no loader is a mistake
@@ -1318,6 +1319,7 @@ const Renderer = struct {
             },
             else => {},
         }
+
         if (obj == .loop) {
             const l = obj.loop;
             if (std.mem.eql(u8, name, "cycle")) {
@@ -1342,6 +1344,12 @@ const Renderer = struct {
                 return .{ .boolean = false };
             }
         }
+
+        if (self.lookup.method(self.lookup.ctx, name)) |fn_ptr| {
+            var ctx = self.filterCtx();
+            return fn_ptr(&ctx, obj, args) catch |err| return self.opError(line, err);
+        }
+
         return filters.callMethod(self.arena, self.io, obj, name, args, self.opts.autoescape) catch |err| switch (err) {
             error.Unsupported => self.fail(line, "'{s}' objects have no method '{s}' in this module", .{ obj.typeName(), name }, error.NotCallable),
             else => |other| other,

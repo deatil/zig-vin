@@ -83,12 +83,12 @@ pub const CompileError = parser.Error;
 pub const RenderError = render_mod.Error;
 pub const Error = CompileError || RenderError;
 
-/// Filter/test authoring surface, for `Environment.addFilter`/`addTest`.
+/// Filter/test authoring surface, for `Environment.addFilter`/`addTest`/`addGlobal`.
 pub const FilterCtx = filters.Ctx;
 pub const FilterFn = filters.Fn;
 pub const TestFn = filters.TestFn;
-/// Global function authoring surface, for `Environment.addGlobal`.
 pub const GlobalFn = filters.GlobalFn;
+pub const MethodFn = filters.MethodFn;
 pub const FilterArgs = filters.Args;
 pub const FilterError = filters.Error;
 pub const FilterKwarg = filters.Kwarg;
@@ -103,6 +103,7 @@ pub const Environment = struct {
     filters: std.StringHashMapUnmanaged(FilterFn) = .empty,
     tests: std.StringHashMapUnmanaged(TestFn) = .empty,
     globals: std.StringHashMapUnmanaged(GlobalFn) = .empty,
+    methods: std.StringHashMapUnmanaged(MethodFn) = .empty,
     /// Optional; without one, any composition tag is `error.NoLoader`.
     loader: ?Loader = null,
 
@@ -163,6 +164,10 @@ pub const Environment = struct {
     /// outlive the environment.
     pub fn addGlobal(self: *Environment, name: []const u8, func: GlobalFn) error{OutOfMemory}!void {
         try self.globals.put(self.gpa, name, func);
+    }
+
+    pub fn addMethod(self: *Environment, name: []const u8, func: MethodFn) error{OutOfMemory}!void {
+        try self.methods.put(self.gpa, name, func);
     }
 
     /// Parse `source` into a reusable `Template`. The template copies the
@@ -259,6 +264,11 @@ pub const Environment = struct {
         return self.globals.contains(name);
     }
 
+    fn hasMethodThunk(ctx: *const anyopaque, name: []const u8) bool {
+        const self: *const Environment = @ptrCast(@alignCast(ctx));
+        return self.methods.contains(name);
+    }
+
     fn filterLookup(ctx: *const anyopaque, name: []const u8) ?FilterFn {
         const self: *const Environment = @ptrCast(@alignCast(ctx));
         return self.filters.get(name);
@@ -272,6 +282,11 @@ pub const Environment = struct {
     fn globalLookup(ctx: *const anyopaque, name: []const u8) ?GlobalFn {
         const self: *const Environment = @ptrCast(@alignCast(ctx));
         return self.globals.get(name);
+    }
+
+    fn methodLookup(ctx: *const anyopaque, name: []const u8) ?MethodFn {
+        const self: *const Environment = @ptrCast(@alignCast(ctx));
+        return self.methods.get(name);
     }
 
     /// Compiles a *loaded* template into the render arena. Loaded templates go
@@ -362,6 +377,7 @@ pub const Template = struct {
             .filter = Environment.filterLookup,
             .test_fn = Environment.testLookup,
             .global = Environment.globalLookup,
+            .method = Environment.methodLookup,
             .loader = self.env.loader,
             .compile = Environment.compileInto,
         }, out, d) catch |e| {

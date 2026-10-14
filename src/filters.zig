@@ -50,6 +50,7 @@ pub const Ctx = struct {
 pub const Fn = *const fn (ctx: *Ctx, input: Value, args: Args) Error!Value;
 pub const TestFn = *const fn (ctx: *Ctx, input: Value, args: Args) Error!bool;
 pub const GlobalFn = *const fn (ctx: *Ctx, args: Args) Error!Value;
+pub const MethodFn = *const fn (ctx: *Ctx, input: Value, args: Args) Error!Value;
 
 pub const Entry = struct { name: []const u8, func: Fn };
 pub const TestEntry = struct { name: []const u8, func: TestFn };
@@ -1514,6 +1515,7 @@ pub fn callMethod(
         .callFilter = unavailableFilter,
         .callTest = unavailableTest,
     };
+
     switch (obj) {
         .undef => return error.UndefinedValue,
         .string => |s| return stringMethod(&ctx, s, name, args),
