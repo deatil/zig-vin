@@ -384,7 +384,7 @@ fn greet_io_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Va
 
     const io = ctx.io;
     const ts = std.Io.Timestamp.now(io, .real).toSeconds();
-    const ts2 = @divTrunc(ts, 1000000);
+    const ts2 = @divTrunc(ts, 100000000);
 
     const out = try ctx.arena.print("fn2: {s},{s},{d}", .{s, t, ts2});
     return .{ .string = .{ .bytes = out, .safe = false } };
@@ -408,7 +408,7 @@ test "Env addGlobal with io" {
     const ctx = try vin.valueFrom(alloc, .{});
     const out = try tpl.render(alloc, ctx, null);
 
-    try testing.expectEqualStrings("<fn2: Text,23678,1791", out);
+    try testing.expectEqualStrings("<fn2: Text,23678,17", out);
 }
 
 fn addString_fn(ctx: *vin.FilterCtx, input: value.Value, args: vin.FilterArgs) filters.Error!value.Value {

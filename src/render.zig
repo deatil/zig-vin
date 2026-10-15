@@ -1189,13 +1189,30 @@ const Renderer = struct {
     }
 
     fn globalCycler(self: *Renderer, args: filters.Args) Error!Value {
-        if (args.pos.len == 0) return error.BadArgument;
-        const items = args.pos;
-        const lv = self.resolve("loop");
-        if (lv == .loop) {
-            const idx = lv.loop.index0;
-            const n: usize = items.len;
-            if (n == 0) return error.BadArgument;
+        _ = self;
+
+        // New form: cycler(data, index)
+        const data_v = args.get(0, "data") orelse return error.BadArgument;
+        const idx_v = args.get(1, "index") orelse return error.BadArgument;
+
+        // index must be integer
+        if (idx_v != .integer) return error.BadArgument;
+        if (idx_v.integer < 0) return error.BadArgument;
+        const idx: usize = @intCast(idx_v.integer);
+
+        var items: []const Value = &.{};
+
+        // input must be a sequence (list or tuple)
+        switch (data_v) {
+            .list => |l| items = l,
+            .tuple => |t| items = t,
+            else => return error.BadArgument,
+        }
+
+        const n: usize = items.len;
+        if (n == 0) return .empty_string;
+
+        if (n > 1) {
             return items[idx % n];
         }
 
@@ -1203,14 +1220,19 @@ const Renderer = struct {
     }
 
     fn globalJoiner(self: *Renderer, args: filters.Args) Error!Value {
+        _ = self;
+        
+        // New form: joiner(input, index)
         const sep_v = args.get(0, "sep") orelse Value.empty_string;
-        const lv = self.resolve("loop");
-        if (lv == .loop) {
-            if (lv.loop.index0 == 0) return Value.empty_string;
-            return sep_v;
-        }
+        const idx_v = args.get(1, "index") orelse return error.BadArgument;
 
-        return Value.empty_string;
+        // index must be integer
+        if (idx_v != .integer) return error.BadArgument;
+        if (idx_v.integer < 0) return error.BadArgument;
+        const idx: usize = @intCast(idx_v.integer);
+
+        if (idx == 0) return .empty_string;
+        return sep_v;
     }
 
     // ── attribute / item / method access ────────────────────────────────────
