@@ -1103,8 +1103,10 @@ const Renderer = struct {
 
             if (std.mem.eql(u8, name, "super") and self.block_stack.items.len != 0)
                 return self.doSuper(c.line);
+
             const bound = self.resolve(name);
             if (bound == .macro) return self.callMacro(bound.macro, args, c.line);
+
             if (std.mem.eql(u8, name, "loop")) return self.recurseLoop(args, c.line);
             if (std.mem.eql(u8, name, "range")) return self.globalRange(args, c.line);
             if (std.mem.eql(u8, name, "dict")) return self.globalDict(args);
@@ -1112,9 +1114,6 @@ const Renderer = struct {
 
             if (std.mem.eql(u8, name, "cycler")) return self.globalCycler(args);
             if (std.mem.eql(u8, name, "joiner")) return self.globalJoiner(args);
-            if (std.mem.eql(u8, name, "lipsum")) {
-                return self.fail(c.line, "global '{s}' is not implemented", .{name}, error.NotCallable);
-            }
 
             return self.fail(c.line, "'{s}' is not callable", .{name}, error.NotCallable);
         }
