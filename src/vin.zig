@@ -36,6 +36,7 @@ pub const Diagnostic = @import("diag.zig").Diagnostic;
 pub const Loader = loader_mod.Loader;
 pub const MapLoader = loader_mod.MapLoader;
 pub const DirLoader = loader_mod.DirLoader;
+pub const DynMapLoader = loader_mod.DynMapLoader;
 pub const LoaderError = loader_mod.Error;
 /// The lexical half of `DirLoader`'s containment, exported so a caller writing
 /// its own filesystem loader can reuse exactly the same rules.

@@ -24,13 +24,15 @@ pub const Loader = struct {
 pub const MapLoader = struct {
     entries: []const Entry,
 
+    const Self = @This();
+
     pub const Entry = struct {
         name: []const u8,
         source: []const u8,
     };
 
-    pub fn create(gpa: Allocator, entries: []const Entry) !*MapLoader {
-        const loader_ptr = try gpa.create(MapLoader);
+    pub fn create(gpa: Allocator, entries: []const Entry) !*Self {
+        const loader_ptr = try gpa.create(Self);
         loader_ptr.* = .{ 
             .entries = entries, 
         };
@@ -38,14 +40,68 @@ pub const MapLoader = struct {
         return loader_ptr;
     }
 
-    pub fn loader(self: *const MapLoader) Loader {
+    pub fn loader(self: *const Self) Loader {
         return .{ .ctx = self, .load = load };
     }
 
     fn load(ctx: *const anyopaque, arena: Allocator, name: []const u8) Error!?[]const u8 {
         _ = arena;
-        const self: *const MapLoader = @ptrCast(@alignCast(ctx));
+        const self: *const Self = @ptrCast(@alignCast(ctx));
         for (self.entries) |e| if (std.mem.eql(u8, e.name, name)) return e.source;
+        return null;
+    }
+};
+
+pub const DynMapLoader = struct {
+    gpa: Allocator,
+    entries: std.StringHashMapUnmanaged(Entry) = .empty,
+
+    const Self = @This();
+
+    pub const Entry = struct {
+        name: []const u8,
+        source: []const u8,
+    };
+
+    pub fn create(gpa: Allocator) !*Self {
+        const loader_ptr = try gpa.create(Self);
+        loader_ptr.* = .{
+            .gpa = gpa,
+            .entries = .empty,
+        };
+
+        return loader_ptr;
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.entries.deinit(self.gpa);
+        self.* = undefined;
+    }
+
+    pub fn put(self: *Self, name: []const u8, source: []const u8) !void {
+        try self.entries.put(self.gpa, name, .{ .name = name, .source = source });
+    }
+
+    pub fn get(self: *const Self, name: []const u8) ?Entry {
+        if (self.entries.get(name)) |e| {
+            return e;
+        }
+
+        return null;
+    }
+
+    pub fn loader(self: *const Self) Loader {
+        return .{ .ctx = self, .load = load };
+    }
+
+    fn load(ctx: *const anyopaque, arena: Allocator, name: []const u8) Error!?[]const u8 {
+        _ = arena;
+
+        const self: *const Self = @ptrCast(@alignCast(ctx));
+        if (self.get(name)) |e| {
+            return e.source;
+        }
+
         return null;
     }
 };
@@ -124,6 +180,8 @@ pub const DirLoader = struct {
     root: std.Io.Dir,
     options: Options = .{},
 
+    const Self = @This();
+
     pub const Options = struct {
         /// Appended to every name, so callers can keep `{% extends 'base' %}`
         /// while files are `base.html`.
@@ -135,8 +193,8 @@ pub const DirLoader = struct {
         allow_symlinks: bool = false,
     };
 
-    pub fn create(gpa: Allocator, io: std.Io, root: std.Io.Dir, options: Options) !*DirLoader {
-        const loader_ptr = try gpa.create(DirLoader);
+    pub fn create(gpa: Allocator, io: std.Io, root: std.Io.Dir, options: Options) !*Self {
+        const loader_ptr = try gpa.create(Self);
         loader_ptr.* = .{ 
             .io = io, 
             .root = root, 
@@ -146,12 +204,12 @@ pub const DirLoader = struct {
         return loader_ptr;
     }
 
-    pub fn loader(self: *const DirLoader) Loader {
+    pub fn loader(self: *const Self) Loader {
         return .{ .ctx = self, .load = load };
     }
 
     fn load(ctx: *const anyopaque, arena: Allocator, name: []const u8) Error!?[]const u8 {
-        const self: *const DirLoader = @ptrCast(@alignCast(ctx));
+        const self: *const Self = @ptrCast(@alignCast(ctx));
 
         var buf: [max_name_len + 64]u8 = undefined;
         const full = if (self.options.suffix.len == 0)

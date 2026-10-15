@@ -477,3 +477,28 @@ test "Env addMethod set" {
 
     try testing.expectEqualStrings("<>{'foo': 'Text'}", out);
 }
+
+test "DynMapLoader renderTemplateAlloc" {
+    const alloc = testing.allocator;
+
+    var arena: std.heap.ArenaAllocator = .init(alloc);
+    defer arena.deinit();
+
+    const a = arena.allocator();
+
+    var map: *vin.DynMapLoader = try .create(a);
+    try map.put("base2", @embedFile("testdata/views/base2.htm"));
+    try map.put("sub/show6", @embedFile("testdata/views/sub/show6.htm"));
+
+    var env = try vin.Environment.initWithLoader(a, .{}, map.loader());
+    defer env.deinit();
+
+    {
+        const ctx = try vin.valueFrom(a, .{
+            .name = "test name",
+        });
+        const out = try env.renderTemplateAlloc("sub/show6", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("[4222==test name]", out);
+    }
+}
