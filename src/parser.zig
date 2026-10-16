@@ -41,19 +41,18 @@ pub const Limits = struct {
     max_nesting_depth: usize = 256,
 };
 
+pub const tagFn = *const fn (parser: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void;
+pub const genericFn = *const fn (ctx: *const anyopaque, render: *anyopaque) ast.Error![]const Node;
+
 /// How the parser asks the environment whether a filter/test name exists.
 pub const Registry = struct {
     ctx: *const anyopaque,
     hasFilter: *const fn (ctx: *const anyopaque, name: []const u8) bool,
     hasTest: *const fn (ctx: *const anyopaque, name: []const u8) bool,
     hasGlobal: *const fn (ctx: *const anyopaque, name: []const u8) bool,
-};
-
-/// Tags the reference implementation has that this module deliberately does
-/// not. They get a named error rather than "unknown tag", so the message says
-/// what is going on instead of looking like a typo.
-const unimplemented_tags = [_][]const u8{
-    "trans", "endtrans", "pluralize", "autoescape", "endautoescape",
+    hasMethod: *const fn (ctx: *const anyopaque, name: []const u8) bool,
+    hasTag: *const fn (ctx: *const anyopaque, name: []const u8) bool,
+    tag: *const fn (ctx: *const anyopaque, name: []const u8) ?tagFn,
 };
 
 pub fn parse(
@@ -75,7 +74,7 @@ pub fn parse(
     return .{ .nodes = body.nodes, .blocks = p.blocks.items, .extends = p.extends };
 }
 
-const Body = struct {
+pub const Body = struct {
     nodes: []const Node,
     /// The `{% end… %}`/`{% else %}`/`{% elif %}` keyword that closed it.
     ended_with: []const u8,
@@ -83,7 +82,7 @@ const Body = struct {
     end_line: usize,
 };
 
-const Parser = struct {
+pub const Parser = struct {
     arena: Allocator,
     pieces: []const lex.Piece,
     idx: usize = 0,
@@ -97,12 +96,12 @@ const Parser = struct {
     /// The first top-level `{% extends %}`.
     extends: ?*const Expr = null,
 
-    fn failAt(self: *Parser, line: usize, comptime msg: []const u8) Error {
+    pub fn failAt(self: *Parser, line: usize, msg: []const u8) Error {
         self.diag.set(line, "{s}", .{msg});
         return error.TemplateSyntaxError;
     }
 
-    fn dupe(self: *Parser, e: Expr) Error!*const Expr {
+    pub fn dupe(self: *Parser, e: Expr) Error!*const Expr {
         const p = try self.arena.create(Expr);
         p.* = e;
         return p;
@@ -111,7 +110,7 @@ const Parser = struct {
     /// Called immediately before descending one more syntactic level, paired
     /// with `defer unnest()`. Refusing *before* the frame is pushed is the
     /// point: once the stack is gone there is no error left to return.
-    fn nest(self: *Parser, line: usize) Error!void {
+    pub fn nest(self: *Parser, line: usize) Error!void {
         if (self.depth >= self.limits.max_nesting_depth) {
             self.diag.set(line, "template nested deeper than {d}", .{self.limits.max_nesting_depth});
             return error.TooDeep;
@@ -119,15 +118,15 @@ const Parser = struct {
         self.depth += 1;
     }
 
-    fn unnest(self: *Parser) void {
+    pub fn unnest(self: *Parser) void {
         self.depth -= 1;
     }
 
-    fn release(self: *Parser, held: usize) void {
+    pub fn release(self: *Parser, held: usize) void {
         self.depth -= held;
     }
 
-    fn parseBody(self: *Parser, stop: []const []const u8) Error!Body {
+    pub fn parseBody(self: *Parser, stop: []const []const u8) Error!Body {
         // Block bodies nest by recursion too — `{% if %}` inside `{% if %}` —
         // and `renderNodes` walks the result the same way, so the same bound
         // has to cover them. 16 000 nested `{% if %}` (a 336 KB template)
@@ -174,7 +173,7 @@ const Parser = struct {
         return .{ .nodes = nodes.items, .ended_with = "", .end_toks = &.{}, .end_line = 0 };
     }
 
-    fn parseStatement(
+    pub fn parseStatement(
         self: *Parser,
         kw: Token,
         toks: []const Token,
@@ -182,6 +181,13 @@ const Parser = struct {
         out: *std.ArrayList(Node),
     ) Error!void {
         const rest = toks[1..];
+
+        if (self.registry.tag(self.registry.ctx, kw.text)) |fn_ptr| {
+            return fn_ptr(self, rest, line, out) catch {
+                return self.failAt(line, "invalid tag");
+            };
+        }
+
         if (std.mem.eql(u8, kw.text, "if")) return self.parseIf(rest, line, out);
         if (std.mem.eql(u8, kw.text, "for")) return self.parseFor(rest, line, out);
         if (std.mem.eql(u8, kw.text, "set")) return self.parseSet(rest, line, out);
@@ -201,9 +207,7 @@ const Parser = struct {
             try out.append(self.arena, .{ .do = .{ .expr = e, .line = line } });
             return;
         }
-        for (unimplemented_tags) |t| if (std.mem.eql(u8, t, kw.text)) {
-            return self.failAt(line, "tag is recognised but not implemented by this module");
-        };
+
         return self.failAt(line, "unknown tag");
     }
 
@@ -454,7 +458,7 @@ const Parser = struct {
         } });
     }
 
-    fn parseParams(self: *Parser, ts: *Stream, line: usize) Error![]const ast.Param {
+    pub fn parseParams(self: *Parser, ts: *Stream, line: usize) Error![]const ast.Param {
         var params: std.ArrayList(ast.Param) = .empty;
         _ = try ts.expect(.lparen, line, "expected `(`");
         while (!ts.eat(.rparen)) {
@@ -520,12 +524,12 @@ const Parser = struct {
 // has to be answered here, by walking the body rather than by watching what
 // happens at call time.
 
-fn mentionsName(nodes: []const Node, name: []const u8) bool {
+pub fn mentionsName(nodes: []const Node, name: []const u8) bool {
     for (nodes) |n| if (nodeMentions(n, name)) return true;
     return false;
 }
 
-fn nodeMentions(n: Node, name: []const u8) bool {
+pub fn nodeMentions(n: Node, name: []const u8) bool {
     return switch (n) {
         .text => false,
         .output => |o| exprMentions(o.expr, name),
@@ -550,16 +554,17 @@ fn nodeMentions(n: Node, name: []const u8) bool {
         // inside it do not belong to the enclosing one.
         .macro => false,
         .call_block => |c| exprMentions(c.call, name),
+        .generic => false,
     };
 }
 
-fn argsMention(a: ast.Args, name: []const u8) bool {
+pub fn argsMention(a: ast.Args, name: []const u8) bool {
     for (a.positional) |p| if (exprMentions(p, name)) return true;
     for (a.keyword) |k| if (exprMentions(k.value, name)) return true;
     return false;
 }
 
-fn exprMentions(e: *const Expr, name: []const u8) bool {
+pub fn exprMentions(e: *const Expr, name: []const u8) bool {
     return switch (e.*) {
         .literal => false,
         .name => |n| std.mem.eql(u8, n, name),
@@ -595,26 +600,26 @@ fn exprMentions(e: *const Expr, name: []const u8) bool {
 }
 
 /// A cursor over one tag's tokens plus the whole expression grammar.
-const Stream = struct {
+pub const Stream = struct {
     toks: []const Token,
     i: usize = 0,
     p: *Parser,
 
-    fn peek(self: *Stream) ?Token {
+    pub fn peek(self: *Stream) ?Token {
         return if (self.i < self.toks.len) self.toks[self.i] else null;
     }
 
-    fn peekAt(self: *Stream, n: usize) ?Token {
+    pub fn peekAt(self: *Stream, n: usize) ?Token {
         return if (self.i + n < self.toks.len) self.toks[self.i + n] else null;
     }
 
-    fn next(self: *Stream) ?Token {
+    pub fn next(self: *Stream) ?Token {
         if (self.i >= self.toks.len) return null;
         defer self.i += 1;
         return self.toks[self.i];
     }
 
-    fn eat(self: *Stream, k: lex.Kind) bool {
+    pub fn eat(self: *Stream, k: lex.Kind) bool {
         if (self.peek()) |t| if (t.kind == k) {
             self.i += 1;
             return true;
@@ -622,7 +627,7 @@ const Stream = struct {
         return false;
     }
 
-    fn eatName(self: *Stream, n: []const u8) bool {
+    pub fn eatName(self: *Stream, n: []const u8) bool {
         if (self.peek()) |t| if (t.isName(n)) {
             self.i += 1;
             return true;
@@ -630,7 +635,7 @@ const Stream = struct {
         return false;
     }
 
-    fn expect(self: *Stream, k: lex.Kind, line: usize, comptime msg: []const u8) Error!Token {
+    pub fn expect(self: *Stream, k: lex.Kind, line: usize, comptime msg: []const u8) Error!Token {
         if (self.peek()) |t| if (t.kind == k) {
             self.i += 1;
             return t;
@@ -638,19 +643,19 @@ const Stream = struct {
         return self.p.failAt(line, msg);
     }
 
-    fn expectEnd(self: *Stream, line: usize) Error!void {
+    pub fn expectEnd(self: *Stream, line: usize) Error!void {
         if (self.i != self.toks.len) return self.p.failAt(line, "trailing tokens in tag");
     }
 
-    fn dupe(self: *Stream, e: Expr) Error!*const Expr {
+    pub fn dupe(self: *Stream, e: Expr) Error!*const Expr {
         return self.p.dupe(e);
     }
 
-    fn nest(self: *Stream, line: usize) Error!void {
+    pub fn nest(self: *Stream, line: usize) Error!void {
         return self.p.nest(line);
     }
 
-    fn unnest(self: *Stream) void {
+    pub fn unnest(self: *Stream) void {
         self.p.unnest();
     }
 
@@ -661,18 +666,18 @@ const Stream = struct {
     /// charged a level here and every level a chain took is released together
     /// when the function that built it returns: siblings do not accumulate,
     /// but a path from the root does.
-    fn nestLink(self: *Stream, held: *usize, line: usize) Error!void {
+    pub fn nestLink(self: *Stream, held: *usize, line: usize) Error!void {
         try self.nest(line);
         held.* += 1;
     }
 
-    fn release(self: *Stream, held: usize) void {
+    pub fn release(self: *Stream, held: usize) void {
         self.p.release(held);
     }
 
     // ── targets ─────────────────────────────────────────────────────────────
 
-    fn parseTarget(self: *Stream, line: usize, allow_attr: bool) Error!ast.Target {
+    pub fn parseTarget(self: *Stream, line: usize, allow_attr: bool) Error!ast.Target {
         const paren = self.eat(.lparen);
         var names: std.ArrayList([]const u8) = .empty;
         while (true) {
@@ -696,7 +701,7 @@ const Stream = struct {
 
     /// Top level of `{{ … }}` and of `{% set x = … %}`: a bare comma list is a
     /// tuple here, unlike inside a subexpression.
-    fn parseTupleTop(self: *Stream, line: usize) Error!*const Expr {
+    pub fn parseTupleTop(self: *Stream, line: usize) Error!*const Expr {
         const first = try self.parseExpression(line, true);
         if (self.peek() == null or self.peek().?.kind != .comma) return first;
         var items: std.ArrayList(*const Expr) = .empty;
@@ -708,12 +713,12 @@ const Stream = struct {
         return self.dupe(.{ .tuple = items.items });
     }
 
-    fn parseExpression(self: *Stream, line: usize, with_condexpr: bool) Error!*const Expr {
+    pub fn parseExpression(self: *Stream, line: usize, with_condexpr: bool) Error!*const Expr {
         if (with_condexpr) return self.parseCondExpr(line);
         return self.parseOr(line);
     }
 
-    fn parseCondExpr(self: *Stream, line: usize) Error!*const Expr {
+    pub fn parseCondExpr(self: *Stream, line: usize) Error!*const Expr {
         var held: usize = 0;
         defer self.release(held);
         var e = try self.parseOr(line);
@@ -727,7 +732,7 @@ const Stream = struct {
         return e;
     }
 
-    fn parseOr(self: *Stream, line: usize) Error!*const Expr {
+    pub fn parseOr(self: *Stream, line: usize) Error!*const Expr {
         var held: usize = 0;
         defer self.release(held);
         var lhs = try self.parseAnd(line);
@@ -739,7 +744,7 @@ const Stream = struct {
         return lhs;
     }
 
-    fn parseAnd(self: *Stream, line: usize) Error!*const Expr {
+    pub fn parseAnd(self: *Stream, line: usize) Error!*const Expr {
         var held: usize = 0;
         defer self.release(held);
         var lhs = try self.parseNot(line);
@@ -751,7 +756,7 @@ const Stream = struct {
         return lhs;
     }
 
-    fn parseNot(self: *Stream, line: usize) Error!*const Expr {
+    pub fn parseNot(self: *Stream, line: usize) Error!*const Expr {
         if (self.eatName("not")) {
             try self.nest(line);
             defer self.unnest();
@@ -761,7 +766,7 @@ const Stream = struct {
         return self.parseCompare(line);
     }
 
-    fn parseCompare(self: *Stream, line: usize) Error!*const Expr {
+    pub fn parseCompare(self: *Stream, line: usize) Error!*const Expr {
         const first = try self.parseMath1(line);
         var links: std.ArrayList(ast.CompareLink) = .empty;
         while (true) {
@@ -793,7 +798,7 @@ const Stream = struct {
         return self.dupe(.{ .compare = .{ .first = first, .links = links.items } });
     }
 
-    fn parseMath1(self: *Stream, line: usize) Error!*const Expr {
+    pub fn parseMath1(self: *Stream, line: usize) Error!*const Expr {
         var held: usize = 0;
         defer self.release(held);
         var lhs = try self.parseConcat(line);
@@ -811,7 +816,7 @@ const Stream = struct {
         return lhs;
     }
 
-    fn parseConcat(self: *Stream, line: usize) Error!*const Expr {
+    pub fn parseConcat(self: *Stream, line: usize) Error!*const Expr {
         var held: usize = 0;
         defer self.release(held);
         var lhs = try self.parseMath2(line);
@@ -823,7 +828,7 @@ const Stream = struct {
         return lhs;
     }
 
-    fn parseMath2(self: *Stream, line: usize) Error!*const Expr {
+    pub fn parseMath2(self: *Stream, line: usize) Error!*const Expr {
         var held: usize = 0;
         defer self.release(held);
         var lhs = try self.parsePow(line);
@@ -843,7 +848,7 @@ const Stream = struct {
         return lhs;
     }
 
-    fn parsePow(self: *Stream, line: usize) Error!*const Expr {
+    pub fn parsePow(self: *Stream, line: usize) Error!*const Expr {
         var held: usize = 0;
         defer self.release(held);
         var lhs = try self.parseUnary(line, true);
@@ -855,7 +860,7 @@ const Stream = struct {
         return lhs;
     }
 
-    fn parseUnary(self: *Stream, line: usize, with_filter: bool) Error!*const Expr {
+    pub fn parseUnary(self: *Stream, line: usize, with_filter: bool) Error!*const Expr {
         var node: *const Expr = undefined;
         if (self.eat(.sub)) {
             try self.nest(line);
@@ -873,7 +878,7 @@ const Stream = struct {
         return node;
     }
 
-    fn parsePrimary(self: *Stream, line: usize) Error!*const Expr {
+    pub fn parsePrimary(self: *Stream, line: usize) Error!*const Expr {
         const t = self.peek() orelse return self.p.failAt(line, "unexpected end of expression");
         switch (t.kind) {
             .name => {
@@ -947,7 +952,7 @@ const Stream = struct {
     }
 
     /// Inside `(` `)`: a comma makes a tuple, a lone expression stays itself.
-    fn parseParenTuple(self: *Stream, line: usize) Error!*const Expr {
+    pub fn parseParenTuple(self: *Stream, line: usize) Error!*const Expr {
         const first = try self.parseExpression(line, true);
         if (self.peek() == null or self.peek().?.kind != .comma) return first;
         var items: std.ArrayList(*const Expr) = .empty;
@@ -959,7 +964,7 @@ const Stream = struct {
         return self.dupe(.{ .tuple = items.items });
     }
 
-    fn parsePostfix(self: *Stream, start: *const Expr, line: usize) Error!*const Expr {
+    pub fn parsePostfix(self: *Stream, start: *const Expr, line: usize) Error!*const Expr {
         var held: usize = 0;
         defer self.release(held);
         var node = start;
@@ -1003,7 +1008,7 @@ const Stream = struct {
         return node;
     }
 
-    fn parseSubscript(self: *Stream, obj: *const Expr, line: usize) Error!*const Expr {
+    pub fn parseSubscript(self: *Stream, obj: *const Expr, line: usize) Error!*const Expr {
         try self.nest(line);
         defer self.unnest();
         var start: ?*const Expr = null;
@@ -1026,7 +1031,7 @@ const Stream = struct {
         return self.dupe(.{ .slice = .{ .obj = obj, .start = start, .stop = stop, .step = step } });
     }
 
-    fn parseCallArgs(self: *Stream, line: usize) Error!ast.Args {
+    pub fn parseCallArgs(self: *Stream, line: usize) Error!ast.Args {
         _ = try self.expect(.lparen, line, "expected `(`");
         try self.nest(line);
         defer self.unnest();
@@ -1053,7 +1058,7 @@ const Stream = struct {
     }
 
     /// `| filter` and `is test`, the tightest-binding postfix layer.
-    fn parseFilterExpr(self: *Stream, start: *const Expr, line: usize) Error!*const Expr {
+    pub fn parseFilterExpr(self: *Stream, start: *const Expr, line: usize) Error!*const Expr {
         var held: usize = 0;
         defer self.release(held);
         var node = start;
@@ -1074,7 +1079,7 @@ const Stream = struct {
         return node;
     }
 
-    fn parseFilterChain(self: *Stream, start: *const Expr, line: usize) Error!*const Expr {
+    pub fn parseFilterChain(self: *Stream, start: *const Expr, line: usize) Error!*const Expr {
         var held: usize = 0;
         defer self.release(held);
         var node = start;
@@ -1086,7 +1091,7 @@ const Stream = struct {
     }
 
     /// `{% filter name(…) | other %}` — the leading `|` is implicit.
-    fn parseFilterChainBare(self: *Stream, start: *const Expr, line: usize) Error!*const Expr {
+    pub fn parseFilterChainBare(self: *Stream, start: *const Expr, line: usize) Error!*const Expr {
         var held: usize = 0;
         defer self.release(held);
         const name = try self.expect(.name, line, "expected a filter name");
@@ -1099,13 +1104,13 @@ const Stream = struct {
         return node;
     }
 
-    fn parseOneFilter(self: *Stream, input: *const Expr, line: usize) Error!*const Expr {
+    pub fn parseOneFilter(self: *Stream, input: *const Expr, line: usize) Error!*const Expr {
         _ = try self.expect(.pipe, line, "expected `|`");
         const name = try self.expect(.name, line, "expected a filter name after `|`");
         return self.finishFilter(input, name, line);
     }
 
-    fn finishFilter(self: *Stream, input: *const Expr, name: Token, line: usize) Error!*const Expr {
+    pub fn finishFilter(self: *Stream, input: *const Expr, name: Token, line: usize) Error!*const Expr {
         if (!self.p.registry.hasFilter(self.p.registry.ctx, name.text))
             return self.p.failAt(line, "unknown filter — every filter name is resolved at compile time (see README's filter table)");
         var args: ast.Args = .{};
@@ -1113,7 +1118,7 @@ const Stream = struct {
         return self.dupe(.{ .filter = .{ .input = input, .name = name.text, .args = args, .line = line } });
     }
 
-    fn parseTest(self: *Stream, input: *const Expr, line: usize) Error!*const Expr {
+    pub fn parseTest(self: *Stream, input: *const Expr, line: usize) Error!*const Expr {
         const negated = self.eatName("not");
         const name_tok = self.next() orelse return self.p.failAt(line, "expected a test name after `is`");
         if (name_tok.kind != .name) return self.p.failAt(line, "expected a test name after `is`");

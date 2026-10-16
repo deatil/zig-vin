@@ -179,6 +179,14 @@ pub const CallBlock = struct {
     line: usize,
 };
 
+pub const Error = error{ TemplateSyntaxError };
+
+pub const Generic = struct {
+    ctx: *const anyopaque,
+    renderFn: *const fn (ctx: *const anyopaque, render: *anyopaque) Error![]const Node,
+    line: usize,
+};
+
 pub const Node = union(enum) {
     text: []const u8,
     output: struct { expr: *const Expr, line: usize },
@@ -201,6 +209,9 @@ pub const Node = union(enum) {
     from_import: FromImport,
     macro: struct { def: *const MacroDef, line: usize },
     call_block: CallBlock,
+    /// A generic catch-all node for extensions or tooling: a short `kind` name
+    /// and a lightweight payload the parser/consumer can interpret.
+    generic: Generic,
 };
 
 pub const Parsed = struct {

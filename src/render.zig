@@ -168,19 +168,19 @@ pub fn render(
 /// Enforces `max_output_bytes`. Not a `std.Io.Writer` implementation — the
 /// renderer only ever appends whole slices, so a two-method shim is enough and
 /// avoids a vtable in the hot path.
-const Counting = struct {
+pub const Counting = struct {
     inner: *Writer,
     limit: usize,
     written: usize = 0,
 
-    fn writeAll(self: *Counting, bytes: []const u8) Error!void {
+    pub fn writeAll(self: *Counting, bytes: []const u8) Error!void {
         self.written += bytes.len;
         if (self.written > self.limit) return error.OutputTooLarge;
         self.inner.writeAll(bytes) catch return error.OutOfMemory;
     }
 };
 
-const Renderer = struct {
+pub const Renderer = struct {
     arena: Allocator,
     io: Io,
     opts: Options,
@@ -217,30 +217,30 @@ const Renderer = struct {
     /// do not capture the importing render's context.
     in_module: bool = false,
 
-    fn fail(self: *Renderer, line: usize, comptime fmt: []const u8, args: anytype, e: Error) Error {
+    pub fn fail(self: *Renderer, line: usize, comptime fmt: []const u8, args: anytype, e: Error) Error {
         self.diag.set(line, fmt, args);
         return e;
     }
 
-    fn newFrame(self: *Renderer) Error!*Frame {
+    pub fn newFrame(self: *Renderer) Error!*Frame {
         const f = try self.arena.create(Frame);
         f.* = .empty;
         return f;
     }
 
-    fn pushFrame(self: *Renderer) Error!void {
+    pub fn pushFrame(self: *Renderer) Error!void {
         try self.frames.append(self.arena, try self.newFrame());
     }
 
-    fn pop(self: *Renderer) void {
+    pub fn pop(self: *Renderer) void {
         _ = self.frames.pop();
     }
 
-    fn define(self: *Renderer, name: []const u8, v: Value) Error!void {
+    pub fn define(self: *Renderer, name: []const u8, v: Value) Error!void {
         try self.frames.items[self.frames.items.len - 1].put(self.arena, name, v);
     }
 
-    fn resolve(self: *Renderer, name: []const u8) Value {
+    pub fn resolve(self: *Renderer, name: []const u8) Value {
         var i = self.frames.items.len;
         while (i > 0) {
             i -= 1;
@@ -259,13 +259,13 @@ const Renderer = struct {
 
     /// Swap in a whole new scope stack — what a macro call, an `{% import %}`
     /// and a non-`scoped` block all need. The caller restores.
-    fn swapFrames(self: *Renderer, frames: std.ArrayList(*Frame)) std.ArrayList(*Frame) {
+    pub fn swapFrames(self: *Renderer, frames: std.ArrayList(*Frame)) std.ArrayList(*Frame) {
         const old = self.frames;
         self.frames = frames;
         return old;
     }
 
-    fn framesFrom(self: *Renderer, captured: []const *Frame) Error!std.ArrayList(*Frame) {
+    pub fn framesFrom(self: *Renderer, captured: []const *Frame) Error!std.ArrayList(*Frame) {
         var list: std.ArrayList(*Frame) = .empty;
         try list.appendSlice(self.arena, captured);
         try list.append(self.arena, try self.newFrame());
@@ -274,11 +274,11 @@ const Renderer = struct {
 
     // ── nodes ───────────────────────────────────────────────────────────────
 
-    fn renderNodes(self: *Renderer, nodes: []const Node) Error!void {
+    pub fn renderNodes(self: *Renderer, nodes: []const Node) Error!void {
         for (nodes) |n| try self.renderNode(n);
     }
 
-    fn renderNode(self: *Renderer, n: Node) Error!void {
+    pub fn renderNode(self: *Renderer, n: Node) Error!void {
         switch (n) {
             .text => |t| if (!self.prelude) try self.out.writeAll(t),
             .output => |o| {
@@ -364,12 +364,18 @@ const Renderer = struct {
             },
             .macro => |m| try self.define(m.def.name, try self.makeMacro(m.def, null)),
             .call_block => |c| try self.renderCallBlock(c),
+            .generic => |g| try self.renderGeneric(g),
         }
     }
 
     // ── templates: loading, the inheritance chain, blocks ───────────────────
 
-    fn templateName(self: *Renderer, v: Value, line: usize) Error![]const u8 {
+    pub fn renderGeneric(self: *Renderer, g: ast.Generic) Error!void {
+        const v = try g.renderFn(g.ctx, self);
+        try self.renderNodes(v);
+    }
+
+    pub fn templateName(self: *Renderer, v: Value, line: usize) Error![]const u8 {
         if (v == .undef) return self.fail(line, "template name '{s}' is undefined", .{v.undef.name}, error.UndefinedValue);
         if (v != .string) return self.fail(line, "a template name must be a string, not {s}", .{v.typeName()}, error.TypeMismatch);
         return v.string.bytes;
@@ -378,7 +384,7 @@ const Renderer = struct {
     /// Load + compile `name`, or null when the loader has no such template.
     /// Cached for the whole render, so a template included in a loop compiles
     /// once and a diamond inheritance graph loads each side once.
-    fn loadUnit(self: *Renderer, name: []const u8, line: usize) Error!?*Unit {
+    pub fn loadUnit(self: *Renderer, name: []const u8, line: usize) Error!?*Unit {
         if (self.cache.get(name)) |u| return u;
         const ldr = self.lookup.loader orelse
             return self.fail(line, "'{s}' cannot be loaded: this environment has no loader", .{name}, error.NoLoader);
@@ -408,7 +414,7 @@ const Renderer = struct {
         return u;
     }
 
-    fn requireUnit(self: *Renderer, name: []const u8, line: usize) Error!*Unit {
+    pub fn requireUnit(self: *Renderer, name: []const u8, line: usize) Error!*Unit {
         return (try self.loadUnit(name, line)) orelse
             self.fail(line, "template '{s}' not found", .{name}, error.TemplateNotFound);
     }
@@ -420,7 +426,7 @@ const Renderer = struct {
     /// the blocks — verified against the reference), output suppressed, and the
     /// chain's ROOT-most template is what actually produces bytes, with block
     /// positions resolving to the most derived definition.
-    fn renderUnit(self: *Renderer, entry: *Unit) Error!void {
+    pub fn renderUnit(self: *Renderer, entry: *Unit) Error!void {
         if (self.template_depth >= self.opts.max_template_depth)
             return self.fail(0, "template nesting deeper than {d}", .{self.opts.max_template_depth}, error.TooDeep);
         self.template_depth += 1;
@@ -470,7 +476,7 @@ const Renderer = struct {
     }
 
     /// The most derived definition of `name`, as an index into `chain`.
-    fn resolveBlock(self: *Renderer, name: []const u8, from: usize) ?struct { idx: usize, def: ast.BlockDef } {
+    pub fn resolveBlock(self: *Renderer, name: []const u8, from: usize) ?struct { idx: usize, def: ast.BlockDef } {
         var i = from;
         while (i < self.chain.len) : (i += 1) {
             for (self.chain[i].parsed.blocks) |b| {
@@ -480,12 +486,12 @@ const Renderer = struct {
         return null;
     }
 
-    fn renderBlockNamed(self: *Renderer, name: []const u8, line: usize) Error!void {
+    pub fn renderBlockNamed(self: *Renderer, name: []const u8, line: usize) Error!void {
         const found = self.resolveBlock(name, 0) orelse return;
         try self.renderBlockDef(name, found.idx, found.def, line);
     }
 
-    fn renderBlockDef(self: *Renderer, name: []const u8, idx: usize, def: ast.BlockDef, line: usize) Error!void {
+    pub fn renderBlockDef(self: *Renderer, name: []const u8, idx: usize, def: ast.BlockDef, line: usize) Error!void {
         if (def.required)
             return self.fail(line, "required block '{s}' was not overridden by a derived template", .{name}, error.BlockError);
 
@@ -510,7 +516,7 @@ const Renderer = struct {
     }
 
     /// `{{ super() }}` — the next definition of the block currently rendering.
-    fn doSuper(self: *Renderer, line: usize) Error!Value {
+    pub fn doSuper(self: *Renderer, line: usize) Error!Value {
         if (self.block_stack.items.len == 0)
             return self.fail(line, "super() outside a block", .{}, error.BlockError);
         const top = self.block_stack.items[self.block_stack.items.len - 1];
@@ -523,7 +529,7 @@ const Renderer = struct {
         self.out = &sub;
         self.renderBlockDef(top.name, found.idx, found.def, line) catch |e| {
             self.out = saved;
-            return e;
+            return self.fail(line, "super() render block def fail", .{}, e);
         };
         self.out = saved;
         self.out.written = sub.written;
@@ -532,7 +538,7 @@ const Renderer = struct {
 
     /// `self` — every block of the current chain as a callable, resolved the
     /// same way a block position resolves.
-    fn selfObject(self: *Renderer) Error!*value.Namespace {
+    pub fn selfObject(self: *Renderer) Error!*value.Namespace {
         if (self.self_ns) |ns| return ns;
         const ns = try self.arena.create(value.Namespace);
         ns.* = .{};
@@ -556,7 +562,7 @@ const Renderer = struct {
 
     // ── include / import ───────────────────────────────────────────────────
 
-    fn renderInclude(self: *Renderer, i: ast.Include) Error!void {
+    pub fn renderInclude(self: *Renderer, i: ast.Include) Error!void {
         const v = try self.eval(i.names, i.line);
         const candidates: []const Value = switch (v) {
             .list, .tuple => |items| items,
@@ -579,7 +585,7 @@ const Renderer = struct {
     /// currently in scope (including loop variables) but its own `{% set %}`s
     /// do not leak back; without context it starts from nothing at all — not
     /// even the render context, which the reference also hides.
-    fn renderNested(self: *Renderer, unit: *Unit, with_context: bool) Error!void {
+    pub fn renderNested(self: *Renderer, unit: *Unit, with_context: bool) Error!void {
         const saved_ctx = self.context;
         const saved_self = self.self_ns;
         defer {
@@ -603,7 +609,7 @@ const Renderer = struct {
 
     /// `{% import %}` / `{% from … import … %}` — run a template for its
     /// definitions, discard its output, and hand back its namespace.
-    fn importModule(self: *Renderer, name_expr: *const Expr, with_context: bool, line: usize) Error!*value.Namespace {
+    pub fn importModule(self: *Renderer, name_expr: *const Expr, with_context: bool, line: usize) Error!*value.Namespace {
         const name = try self.templateName(try self.eval(name_expr, line), line);
         const unit = try self.requireUnit(name, line);
 
@@ -662,7 +668,7 @@ const Renderer = struct {
 
     // ── macros ─────────────────────────────────────────────────────────────
 
-    fn makeMacro(self: *Renderer, def: *const ast.MacroDef, block_body: ?[]const Node) Error!Value {
+    pub fn makeMacro(self: *Renderer, def: *const ast.MacroDef, block_body: ?[]const Node) Error!Value {
         const impl = try self.arena.create(MacroImpl);
         impl.* = .{
             .def = def,
@@ -676,7 +682,7 @@ const Renderer = struct {
         return .{ .macro = .{ .name = def.name, .impl = impl } };
     }
 
-    fn callMacro(self: *Renderer, ref: value.MacroRef, args: filters.Args, line: usize) Error!Value {
+    pub fn callMacro(self: *Renderer, ref: value.MacroRef, args: filters.Args, line: usize) Error!Value {
         const impl: *const MacroImpl = @ptrCast(@alignCast(ref.impl));
         const def = impl.def;
 
@@ -726,7 +732,7 @@ const Renderer = struct {
         return .{ .string = .{ .bytes = aw.written(), .safe = self.opts.autoescape } };
     }
 
-    fn bindMacroArgs(
+    pub fn bindMacroArgs(
         self: *Renderer,
         def: *const ast.MacroDef,
         frame: *Frame,
@@ -775,7 +781,7 @@ const Renderer = struct {
         if (def.catch_kwargs) try frame.put(self.arena, "kwargs", .{ .map = .{ .pairs = extra.items } });
     }
 
-    fn renderCallBlock(self: *Renderer, c: ast.CallBlock) Error!void {
+    pub fn renderCallBlock(self: *Renderer, c: ast.CallBlock) Error!void {
         const caller_macro = try self.makeMacro(&c.caller, null);
         const saved = self.pending_caller;
         self.pending_caller = caller_macro;
@@ -784,14 +790,14 @@ const Renderer = struct {
         try self.emit(v, c.line);
     }
 
-    fn evalWithBlockInput(self: *Renderer, chain: *const Expr, input: Value) Error!Value {
+    pub fn evalWithBlockInput(self: *Renderer, chain: *const Expr, input: Value) Error!Value {
         const saved = self.block_input;
         self.block_input = input;
         defer self.block_input = saved;
         return self.eval(chain, 0);
     }
 
-    fn renderFor(self: *Renderer, f: ast.For) Error!void {
+    pub fn renderFor(self: *Renderer, f: ast.For) Error!void {
         const seq_val = try self.eval(f.iterable, 0);
         if (seq_val == .undef and self.opts.undefined_policy == .strict)
             return self.fail(0, "'{s}' is undefined", .{seq_val.undef.name}, error.UndefinedValue);
@@ -821,7 +827,7 @@ const Renderer = struct {
 
     /// One level of a loop. `depth` is non-zero only for a `recursive` loop
     /// re-entered through `loop()`.
-    fn runLoop(self: *Renderer, f: ast.For, items: []const Value, depth: usize) Error!void {
+    pub fn runLoop(self: *Renderer, f: ast.For, items: []const Value, depth: usize) Error!void {
         const loop = try self.arena.create(value.Loop);
         loop.* = .{ .items = items, .depth0 = depth };
         try self.define("loop", .{ .loop = loop });
@@ -838,7 +844,7 @@ const Renderer = struct {
     }
 
     /// `{{ loop(children) }}` inside a `{% for … recursive %}` body.
-    fn recurseLoop(self: *Renderer, args: filters.Args, line: usize) Error!Value {
+    pub fn recurseLoop(self: *Renderer, args: filters.Args, line: usize) Error!Value {
         const rec = self.recursive orelse
             return self.fail(line, "loop() is only callable inside a `{{% for … recursive %}}` body", .{}, error.NotCallable);
         if (args.pos.len != 1) return self.fail(line, "loop() takes exactly one sequence", .{}, error.BadCall);
@@ -867,7 +873,7 @@ const Renderer = struct {
         return .{ .string = .{ .bytes = aw.written(), .safe = self.opts.autoescape } };
     }
 
-    fn bindTarget(self: *Renderer, t: ast.Target, item: Value) Error!void {
+    pub fn bindTarget(self: *Renderer, t: ast.Target, item: Value) Error!void {
         switch (t) {
             .name => |n| try self.define(n, item),
             .tuple => |names| {
@@ -879,7 +885,7 @@ const Renderer = struct {
         }
     }
 
-    fn assign(self: *Renderer, t: ast.Target, v: Value, line: usize) Error!void {
+    pub fn assign(self: *Renderer, t: ast.Target, v: Value, line: usize) Error!void {
         switch (t) {
             .name, .tuple => try self.bindTarget(t, v),
             .attr => |a| {
@@ -891,7 +897,7 @@ const Renderer = struct {
         }
     }
 
-    fn emit(self: *Renderer, v: Value, line: usize) Error!void {
+    pub fn emit(self: *Renderer, v: Value, line: usize) Error!void {
         if (v == .undef) {
             if (self.opts.undefined_policy == .strict)
                 return self.fail(line, "'{s}' is undefined", .{v.undef.name}, error.UndefinedValue);
@@ -913,7 +919,7 @@ const Renderer = struct {
         try self.out.writeAll(esc.written());
     }
 
-    fn truthy(self: *Renderer, e: *const Expr, line: usize) Error!bool {
+    pub fn truthy(self: *Renderer, e: *const Expr, line: usize) Error!bool {
         const v = try self.eval(e, line);
         if (v == .undef and self.opts.undefined_policy == .strict)
             return self.fail(line, "'{s}' is undefined", .{v.undef.name}, error.UndefinedValue);
@@ -922,7 +928,7 @@ const Renderer = struct {
 
     // ── expressions ─────────────────────────────────────────────────────────
 
-    fn eval(self: *Renderer, e: *const Expr, line: usize) Error!Value {
+    pub fn eval(self: *Renderer, e: *const Expr, line: usize) Error!Value {
         switch (e.*) {
             .literal => |v| return v,
             .name => |n| {
@@ -1032,12 +1038,12 @@ const Renderer = struct {
         }
     }
 
-    fn opError(self: *Renderer, line: usize, err: Error) Error {
+    pub fn opError(self: *Renderer, line: usize, err: Error) Error {
         if (self.diag.len == 0) self.diag.set(line, "{s}", .{@errorName(err)});
         return err;
     }
 
-    fn evalArgs(self: *Renderer, a: ast.Args, line: usize) Error!filters.Args {
+    pub fn evalArgs(self: *Renderer, a: ast.Args, line: usize) Error!filters.Args {
         const pos = try self.arena.alloc(Value, a.positional.len);
         for (a.positional, 0..) |p, i| pos[i] = try self.eval(p, line);
         const kw = try self.arena.alloc(filters.Kwarg, a.keyword.len);
@@ -1045,7 +1051,7 @@ const Renderer = struct {
         return .{ .pos = pos, .kw = kw };
     }
 
-    fn filterCtx(self: *Renderer) filters.Ctx {
+    pub fn filterCtx(self: *Renderer) filters.Ctx {
         return .{
             .arena = self.arena,
             .io = self.io,
@@ -1057,7 +1063,7 @@ const Renderer = struct {
         };
     }
 
-    fn callFilterThunk(ctx: *filters.Ctx, name: []const u8, input: Value, args: filters.Args) filters.Error!Value {
+    pub fn callFilterThunk(ctx: *filters.Ctx, name: []const u8, input: Value, args: filters.Args) filters.Error!Value {
         const self: *Renderer = @ptrCast(@alignCast(@constCast(ctx.user)));
         return self.applyFilter(name, input, args, 0) catch |e| switch (e) {
             error.OutOfMemory => error.OutOfMemory,
@@ -1074,14 +1080,14 @@ const Renderer = struct {
         };
     }
 
-    fn callTestThunk(ctx: *filters.Ctx, name: []const u8, input: Value, args: filters.Args) filters.Error!bool {
+    pub fn callTestThunk(ctx: *filters.Ctx, name: []const u8, input: Value, args: filters.Args) filters.Error!bool {
         const self: *Renderer = @ptrCast(@alignCast(@constCast(ctx.user)));
         const fn_ptr = self.lookup.test_fn(self.lookup.ctx, name) orelse return error.BadArgument;
         var sub = self.filterCtx();
         return fn_ptr(&sub, input, args);
     }
 
-    fn applyFilter(self: *Renderer, name: []const u8, input: Value, args: filters.Args, line: usize) Error!Value {
+    pub fn applyFilter(self: *Renderer, name: []const u8, input: Value, args: filters.Args, line: usize) Error!Value {
         const fn_ptr = self.lookup.filter(self.lookup.ctx, name) orelse
             return self.fail(line, "unknown filter '{s}'", .{name}, error.UnknownFilter);
         var ctx = self.filterCtx();
@@ -1091,14 +1097,16 @@ const Renderer = struct {
         };
     }
 
-    fn evalCall(self: *Renderer, c: anytype) Error!Value {
+    pub fn evalCall(self: *Renderer, c: anytype) Error!Value {
         if (c.callee.* == .name) {
             const name = c.callee.name;
             const args = try self.evalArgs(c.args, c.line);
 
             if (self.lookup.global(self.lookup.ctx, name)) |fn_ptr| {
                 var ctx = self.filterCtx();
-                return fn_ptr(&ctx, args) catch |err| return self.opError(c.line, err);
+                return fn_ptr(&ctx, args) catch |err| {
+                    return self.fail(c.line, "'{s}' call fail", .{name}, err);
+                };
             }
 
             if (std.mem.eql(u8, name, "super") and self.block_stack.items.len != 0)
@@ -1109,11 +1117,19 @@ const Renderer = struct {
 
             if (std.mem.eql(u8, name, "loop")) return self.recurseLoop(args, c.line);
             if (std.mem.eql(u8, name, "range")) return self.globalRange(args, c.line);
-            if (std.mem.eql(u8, name, "dict")) return self.globalDict(args);
-            if (std.mem.eql(u8, name, "namespace")) return self.globalNamespace(args);
+            if (std.mem.eql(u8, name, "dict")) return self.globalDict(args) catch |err| {
+                return self.fail(c.line, "'{s}' call fail", .{name}, err);
+            };
+            if (std.mem.eql(u8, name, "namespace")) return self.globalNamespace(args) catch |err| {
+                return self.fail(c.line, "'{s}' call fail", .{name}, err);
+            };
 
-            if (std.mem.eql(u8, name, "cycler")) return self.globalCycler(args);
-            if (std.mem.eql(u8, name, "joiner")) return self.globalJoiner(args);
+            if (std.mem.eql(u8, name, "cycler")) return self.globalCycler(args) catch |err| {
+                return self.fail(c.line, "'{s}' call fail", .{name}, err);
+            };
+            if (std.mem.eql(u8, name, "joiner")) return self.globalJoiner(args) catch |err| {
+                return self.fail(c.line, "'{s}' call fail", .{name}, err);
+            };
 
             return self.fail(c.line, "'{s}' is not callable", .{name}, error.NotCallable);
         }
@@ -1121,8 +1137,10 @@ const Renderer = struct {
         return self.fail(c.line, "only the built-in globals are callable in this module", .{}, error.NotCallable);
     }
 
-    fn globalRange(self: *Renderer, args: filters.Args, line: usize) Error!Value {
-        if (args.pos.len == 0 or args.pos.len > 3) return error.BadArgument;
+    pub fn globalRange(self: *Renderer, args: filters.Args, line: usize) Error!Value {
+        if (args.pos.len == 0 or args.pos.len > 3) {
+            return self.fail(line, "range() args invalid length", .{}, error.BadArgument);
+        }
         var start: i64 = 0;
         var stop: i64 = 0;
         var step: i64 = 1;
@@ -1134,7 +1152,9 @@ const Renderer = struct {
             stop = try intOf(nums[1]);
             if (nums.len == 3) step = try intOf(nums[2]);
         }
-        if (step == 0) return error.BadArgument;
+        if (step == 0) {
+            return self.fail(line, "range() args invalid run", .{}, error.BadArgument);
+        }
         // `stop - start` is a subtraction of two numbers the template or the
         // context supplied, so it is done in `i128`: `range(-2^63, 2^63-1)`
         // overflows `i64` here and the count never reaches the cap below.
@@ -1163,14 +1183,14 @@ const Renderer = struct {
         return .{ .list = out };
     }
 
-    fn globalDict(self: *Renderer, args: filters.Args) Error!Value {
+    pub fn globalDict(self: *Renderer, args: filters.Args) Error!Value {
         if (args.pos.len != 0) return error.BadArgument;
         const pairs = try self.arena.alloc(value.Pair, args.kw.len);
         for (args.kw, 0..) |k, i| pairs[i] = .{ .key = Value.fromString(k.name), .value = k.value };
         return .{ .map = .{ .pairs = pairs } };
     }
 
-    fn globalNamespace(self: *Renderer, args: filters.Args) Error!Value {
+    pub fn globalNamespace(self: *Renderer, args: filters.Args) Error!Value {
         const ns = try self.arena.create(value.Namespace);
         ns.* = .{};
         for (args.pos) |p| {
@@ -1187,7 +1207,7 @@ const Renderer = struct {
         return .{ .namespace = ns };
     }
 
-    fn globalCycler(self: *Renderer, args: filters.Args) Error!Value {
+    pub fn globalCycler(self: *Renderer, args: filters.Args) Error!Value {
         _ = self;
 
         // New form: cycler(data, index)
@@ -1218,7 +1238,7 @@ const Renderer = struct {
         return items[0];
     }
 
-    fn globalJoiner(self: *Renderer, args: filters.Args) Error!Value {
+    pub fn globalJoiner(self: *Renderer, args: filters.Args) Error!Value {
         _ = self;
         
         // New form: joiner(input, index)
@@ -1236,7 +1256,7 @@ const Renderer = struct {
 
     // ── attribute / item / method access ────────────────────────────────────
 
-    fn getAttr(self: *Renderer, obj: Value, name: []const u8, line: usize) Error!Value {
+    pub fn getAttr(self: *Renderer, obj: Value, name: []const u8, line: usize) Error!Value {
         switch (obj) {
             .undef => return self.fail(line, "'{s}' is undefined, so '.{s}' cannot be read", .{ obj.undef.name, name }, error.UndefinedValue),
             .map => |m| return m.get(name) orelse .{ .undef = .{ .name = name } },
@@ -1247,7 +1267,7 @@ const Renderer = struct {
         }
     }
 
-    fn macroAttr(self: *Renderer, m: value.MacroRef, name: []const u8) Error!Value {
+    pub fn macroAttr(self: *Renderer, m: value.MacroRef, name: []const u8) Error!Value {
         const impl: *const MacroImpl = @ptrCast(@alignCast(m.impl));
         if (std.mem.eql(u8, name, "name")) return Value.fromString(m.name);
         if (std.mem.eql(u8, name, "arguments")) {
@@ -1261,7 +1281,7 @@ const Renderer = struct {
         return .{ .undef = .{ .name = name } };
     }
 
-    fn loopAttr(self: *Renderer, l: *value.Loop, name: []const u8) Error!Value {
+    pub fn loopAttr(self: *Renderer, l: *value.Loop, name: []const u8) Error!Value {
         const len = l.items.len;
         if (std.mem.eql(u8, name, "index")) return .{ .integer = @intCast(l.index0 + 1) };
         if (std.mem.eql(u8, name, "index0")) return .{ .integer = @intCast(l.index0) };
@@ -1280,7 +1300,7 @@ const Renderer = struct {
         return .{ .undef = .{ .name = name } };
     }
 
-    fn getItem(self: *Renderer, obj: Value, idx: Value, line: usize) Error!Value {
+    pub fn getItem(self: *Renderer, obj: Value, idx: Value, line: usize) Error!Value {
         switch (obj) {
             .undef => return self.fail(line, "'{s}' is undefined, so it cannot be subscripted", .{obj.undef.name}, error.UndefinedValue),
             .list, .tuple => |items| {
@@ -1308,7 +1328,7 @@ const Renderer = struct {
         }
     }
 
-    fn evalSlice(self: *Renderer, s: anytype, line: usize) Error!Value {
+    pub fn evalSlice(self: *Renderer, s: anytype, line: usize) Error!Value {
         const obj = try self.eval(s.obj, line);
         const start = if (s.start) |e| try self.eval(e, line) else Value.none;
         const stop = if (s.stop) |e| try self.eval(e, line) else Value.none;
@@ -1329,7 +1349,7 @@ const Renderer = struct {
         return .{ .list = picked };
     }
 
-    fn callMethod(self: *Renderer, obj: Value, name: []const u8, args: filters.Args, line: usize) Error!Value {
+    pub fn callMethod(self: *Renderer, obj: Value, name: []const u8, args: filters.Args, line: usize) Error!Value {
         // `{% import 'm' as m %}{{ m.hello() }}` — the attribute IS the macro.
         switch (obj) {
             .namespace => |ns| if (ns.get(name)) |v| {
@@ -1344,12 +1364,16 @@ const Renderer = struct {
         if (obj == .loop) {
             const l = obj.loop;
             if (std.mem.eql(u8, name, "cycle")) {
-                if (args.pos.len == 0) return error.BadArgument;
+                if (args.pos.len == 0) {
+                    return self.fail(line, "'{s}' method bad argument", .{name}, error.BadArgument);
+                }
                 return args.pos[l.index0 % args.pos.len];
             }
 
             if (std.mem.eql(u8, name, "join")) {
-                if (args.pos.len == 0) return error.BadArgument;
+                if (args.pos.len == 0) {
+                    return self.fail(line, "'{s}' method bad argument", .{name}, error.BadArgument);
+                }
                 if (l.index0 == 0) return Value.empty_string;
                 const sep_v = args.get(0, "sep") orelse Value.empty_string;
                 return sep_v;
@@ -1368,7 +1392,9 @@ const Renderer = struct {
 
         if (self.lookup.method(self.lookup.ctx, name)) |fn_ptr| {
             var ctx = self.filterCtx();
-            return fn_ptr(&ctx, obj, args) catch |err| return self.opError(line, err);
+            return fn_ptr(&ctx, obj, args) catch |err| {
+                return self.fail(line, "'{s}' method call fail", .{name}, err);
+            };
         }
 
         return filters.callMethod(self.arena, self.io, obj, name, args, self.opts.autoescape) catch |err| switch (err) {
@@ -1378,7 +1404,7 @@ const Renderer = struct {
     }
 };
 
-fn intOf(v: Value) Error!i64 {
+pub fn intOf(v: Value) Error!i64 {
     return switch (v) {
         .integer => |i| i,
         .boolean => |b| @intFromBool(b),
@@ -1393,7 +1419,7 @@ fn intOf(v: Value) Error!i64 {
 
 /// Python's negative-index rule; null when out of range (which the caller turns
 /// into undefined, as the reference does).
-fn pyIndex(idx: Value, len: usize) ?usize {
+pub fn pyIndex(idx: Value, len: usize) ?usize {
     const i: i64 = switch (idx) {
         .integer => |n| n,
         .boolean => |b| @intFromBool(b),
@@ -1405,12 +1431,12 @@ fn pyIndex(idx: Value, len: usize) ?usize {
     return @intCast(eff);
 }
 
-fn clampIndex(i: i64, len: i64) i64 {
+pub fn clampIndex(i: i64, len: i64) i64 {
     const eff = if (i < 0) i + len else i;
     return @max(0, @min(eff, len));
 }
 
-fn pySlice(
+pub fn pySlice(
     arena: Allocator,
     items: []const Value,
     start_v: Value,

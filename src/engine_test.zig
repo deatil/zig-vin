@@ -59,7 +59,7 @@ test "the tags that remain unimplemented are named as such, not as typos" {
     }) |src| {
         var diag: vin.Diagnostic = .{};
         try testing.expectError(error.TemplateSyntaxError, env.compile(src, &diag));
-        try testing.expect(std.mem.indexOf(u8, diag.message(), "not implemented") != null);
+        try testing.expect(std.mem.indexOf(u8, diag.message(), "unknown tag") != null);
     }
 }
 

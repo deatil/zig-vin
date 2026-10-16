@@ -4,14 +4,20 @@ const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
 
 const lexer = @import("lexer.zig");
-const parser = @import("parser.zig");
-const ast = @import("ast.zig");
-const loader_mod = @import("loader.zig");
-const render_mod = @import("render.zig");
 
+pub const ast = @import("ast.zig");
+pub const parser = @import("parser.zig");
+pub const renders = @import("render.zig");
+pub const loaders = @import("loader.zig");
 pub const filters = @import("filters.zig");
 pub const value = @import("value.zig");
 
+pub const Parser = parser.Parser;
+pub const Stream = parser.Stream;
+pub const Token = lexer.Token;
+pub const Renderer = renders.Renderer;
+pub const Expr = ast.Expr;
+pub const Node = ast.Node;
 pub const Value = value.Value;
 pub const Str = value.Str;
 pub const Pair = value.Pair;
@@ -33,15 +39,15 @@ pub const escapeAlloc = value.escapeAlloc;
 pub const Diagnostic = @import("diag.zig").Diagnostic;
 
 /// Where `{% extends %}`, `{% include %}` and `{% import %}` find templates.
-pub const Loader = loader_mod.Loader;
-pub const MapLoader = loader_mod.MapLoader;
-pub const DirLoader = loader_mod.DirLoader;
-pub const DynMapLoader = loader_mod.DynMapLoader;
-pub const LoaderError = loader_mod.Error;
+pub const Loader = loaders.Loader;
+pub const MapLoader = loaders.MapLoader;
+pub const DirLoader = loaders.DirLoader;
+pub const DynMapLoader = loaders.DynMapLoader;
+pub const LoaderError = loaders.Error;
 /// The lexical half of `DirLoader`'s containment, exported so a caller writing
 /// its own filesystem loader can reuse exactly the same rules.
-pub const checkTemplateName = loader_mod.checkName;
-pub const UndefinedPolicy = render_mod.UndefinedPolicy;
+pub const checkTemplateName = loaders.checkName;
+pub const UndefinedPolicy = renders.UndefinedPolicy;
 
 pub const Options = struct {
     autoescape: bool = false,
@@ -80,8 +86,9 @@ pub const Options = struct {
     max_nesting_depth: usize = 256,
 };
 
+pub const AstError = ast.Error;
 pub const CompileError = parser.Error;
-pub const RenderError = render_mod.Error;
+pub const RenderError = renders.Error;
 pub const Error = CompileError || RenderError;
 
 /// Filter/test authoring surface, for `Environment.addFilter`/`addTest`/`addGlobal`/`addMethod`.
@@ -90,6 +97,7 @@ pub const FilterFn = filters.Fn;
 pub const TestFn = filters.TestFn;
 pub const GlobalFn = filters.GlobalFn;
 pub const MethodFn = filters.MethodFn;
+pub const tagFn = parser.tagFn;
 pub const FilterArgs = filters.Args;
 pub const FilterError = filters.Error;
 pub const FilterKwarg = filters.Kwarg;
@@ -105,6 +113,7 @@ pub const Environment = struct {
     tests: std.StringHashMapUnmanaged(TestFn) = .empty,
     globals: std.StringHashMapUnmanaged(GlobalFn) = .empty,
     methods: std.StringHashMapUnmanaged(MethodFn) = .empty,
+    tags: std.StringHashMapUnmanaged(tagFn) = .empty,
     /// Optional; without one, any composition tag is `error.NoLoader`.
     loader: ?Loader = null,
 
@@ -171,6 +180,10 @@ pub const Environment = struct {
         try self.methods.put(self.gpa, name, func);
     }
 
+    pub fn addTag(self: *Environment, name: []const u8, func: tagFn) error{OutOfMemory}!void {
+        try self.tags.put(self.gpa, name, func);
+    }
+
     /// Parse `source` into a reusable `Template`. The template copies the
     /// source, so `source` need not outlive the call. `diag` (optional) is
     /// filled in on `error.TemplateSyntaxError`.
@@ -199,6 +212,9 @@ pub const Environment = struct {
             .hasFilter = hasFilterThunk,
             .hasTest = hasTestThunk,
             .hasGlobal = hasGlobalThunk,
+            .hasMethod = hasMethodThunk,
+            .hasTag = hasTagThunk,
+            .tag = tagLookup,
         }, .{ .max_nesting_depth = self.options.max_nesting_depth }, d);
 
         return .{ 
@@ -270,6 +286,11 @@ pub const Environment = struct {
         return self.methods.contains(name);
     }
 
+    fn hasTagThunk(ctx: *const anyopaque, name: []const u8) bool {
+        const self: *const Environment = @ptrCast(@alignCast(ctx));
+        return self.tags.contains(name);
+    }
+
     fn filterLookup(ctx: *const anyopaque, name: []const u8) ?FilterFn {
         const self: *const Environment = @ptrCast(@alignCast(ctx));
         return self.filters.get(name);
@@ -288,6 +309,11 @@ pub const Environment = struct {
     fn methodLookup(ctx: *const anyopaque, name: []const u8) ?MethodFn {
         const self: *const Environment = @ptrCast(@alignCast(ctx));
         return self.methods.get(name);
+    }
+
+    fn tagLookup(ctx: *const anyopaque, name: []const u8) ?tagFn {
+        const self: *const Environment = @ptrCast(@alignCast(ctx));
+        return self.tags.get(name);
     }
 
     /// Compiles a *loaded* template into the render arena. Loaded templates go
@@ -313,6 +339,9 @@ pub const Environment = struct {
             .hasFilter = hasFilterThunk,
             .hasTest = hasTestThunk,
             .hasGlobal = hasGlobalThunk,
+            .hasMethod = hasMethodThunk,
+            .hasTag = hasTagThunk,
+            .tag = tagLookup,
         }, .{ .max_nesting_depth = self.options.max_nesting_depth }, diag);
     }
 };
@@ -366,7 +395,7 @@ pub const Template = struct {
             .remaining = self.env.options.max_render_bytes,
         };
 
-        render_mod.render(budget.allocator(), self.io, self.parsed, context, .{
+        renders.render(budget.allocator(), self.io, self.parsed, context, .{
             .autoescape = self.env.options.autoescape,
             .undefined_policy = self.env.options.undefined_policy,
             .max_output_bytes = self.env.options.max_output_bytes,

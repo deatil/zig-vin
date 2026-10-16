@@ -375,6 +375,30 @@ test "Env addGlobal fail" {
     try testing.expectEqualStrings("line 1: 'greet31' is not callable", msg);
 }
 
+test "Env addGlobal fail 2" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    try env.addGlobal("greet3", greet3_fn);
+
+    var tpl = try env.compile("<{{ greet3(tulu=23678, name='Text') }}", null);
+    defer tpl.deinit();
+
+    var diag: vin.Diagnostic = undefined;
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = tpl.render(alloc, ctx, &diag);
+
+    try testing.expectError(error.BadArgument, out);
+
+    const msg = try alloc.print("{f}", .{diag});
+    try testing.expectEqualStrings("line 1: 'greet3' call fail", msg);
+}
+
 fn greet_io_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Value {
     const name_val = args.byName("name") orelse return error.BadArgument;
     const tul_val = args.byName("tul") orelse return error.BadArgument;
@@ -442,6 +466,32 @@ test "Env addMethod" {
     try testing.expectEqualStrings("<>addstr: Text,user", out);
 }
 
+test "Env addMethod fail" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    try env.addMethod("addString", addString_fn);
+
+    var tpl = try env.compile("<>{{ str.addString(nameh='Text') }}", null);
+    defer tpl.deinit();
+
+    var diag: vin.Diagnostic = undefined;
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .str = "user",
+    });
+    const out = tpl.render(alloc, ctx, &diag);
+
+    try testing.expectError(error.BadArgument, out);
+
+    const msg = try alloc.print("{f}", .{diag});
+    try testing.expectEqualStrings("line 1: 'addString' method call fail", msg);
+}
+
 fn cy_set_fn(ctx: *vin.FilterCtx, input: value.Value, args: vin.FilterArgs) filters.Error!value.Value {
     const name_val = args.byName("name") orelse return error.BadArgument;
 
@@ -501,4 +551,61 @@ test "DynMapLoader renderTemplateAlloc" {
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
+}
+
+const TestH = struct {
+    line: usize,
+    name: []const u8,
+    data: []const vin.Node,
+
+    pub fn test_fn(ctx: *const anyopaque, render: *anyopaque) vin.AstError![]const vin.Node {
+        const self: *const TestH = @ptrCast(@alignCast(ctx));
+        var r: *vin.Renderer = @ptrCast(@alignCast(render));
+
+        r.emit(.fromString(self.name), self.line) catch return vin.AstError.TemplateSyntaxError;
+
+        return self.data;
+    }
+};
+
+fn tag_addstrings_fn(parser: *vin.Parser, rest: []const vin.Token, line: usize, out: *std.ArrayList(vin.Node)) vin.CompileError!void {
+    var ts: vin.Stream = .{ .toks = rest, .p = parser };
+    const name = try ts.expect(.name, line, "expected a addstrings name");
+    const body = try parser.parseBody(&.{"endaddstrings"});
+
+    const h = TestH{
+        .line = line,
+        .name = name.text,
+        .data = body.nodes,
+    };
+
+    const def = try parser.arena.create(vin.ast.Generic);
+    def.* = .{
+        .ctx = &h,
+        .renderFn = TestH.test_fn,
+        .line = line,
+    };
+
+    try out.append(parser.arena, .{ .generic = def.* });
+}
+
+test "Env addTag" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    try env.addTag("addstrings", tag_addstrings_fn);
+
+    var tpl = try env.compile("<>{% addstrings title %}123{% endaddstrings %}", null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .str = "user",
+    });
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("<>title123", out);
 }
