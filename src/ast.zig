@@ -209,8 +209,7 @@ pub const Node = union(enum) {
     from_import: FromImport,
     macro: struct { def: *const MacroDef, line: usize },
     call_block: CallBlock,
-    /// A generic catch-all node for extensions or tooling: a short `kind` name
-    /// and a lightweight payload the parser/consumer can interpret.
+    /// A generic catch-all node for extensions or tooling.
     generic: Generic,
 };
 
