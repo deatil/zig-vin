@@ -370,13 +370,6 @@ pub const Renderer = struct {
 
     // ── templates: loading, the inheritance chain, blocks ───────────────────
 
-    pub fn renderGeneric(self: *Renderer, g: ast.Generic) Error!void {
-        const v = g.renderFn(g.ctx, self) catch |err| {
-            return self.fail(g.line, "tag use invalid", .{}, err);
-        };
-        try self.renderNodes(v);
-    }
-
     pub fn templateName(self: *Renderer, v: Value, line: usize) Error![]const u8 {
         if (v == .undef) return self.fail(line, "template name '{s}' is undefined", .{v.undef.name}, error.UndefinedValue);
         if (v != .string) return self.fail(line, "a template name must be a string, not {s}", .{v.typeName()}, error.TypeMismatch);
@@ -797,6 +790,13 @@ pub const Renderer = struct {
         self.block_input = input;
         defer self.block_input = saved;
         return self.eval(chain, 0);
+    }
+
+    pub fn renderGeneric(self: *Renderer, g: ast.Generic) Error!void {
+        const v = g.renderFn(g.ctx, self) catch |err| {
+            return self.fail(g.line, "tag use invalid", .{}, err);
+        };
+        try self.renderNodes(v);
     }
 
     pub fn renderFor(self: *Renderer, f: ast.For) Error!void {
