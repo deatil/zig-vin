@@ -609,3 +609,83 @@ test "Env addTag" {
 
     try testing.expectEqualStrings("<>title123", out);
 }
+
+test "Env addTag fail" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    try env.addTag("addstrings", tag_addstrings_fn);
+
+    var diag: vin.Diagnostic = undefined;
+
+    const tpl = env.compile("<>{% addstrings title %}123{% endaddstring %}", &diag);
+
+    try testing.expectError(error.TemplateSyntaxError, tpl);
+
+    const msg = try alloc.print("{f}", .{diag});
+    try testing.expectEqualStrings("line 1: invalid tag", msg);
+}
+
+const TestH2 = struct {
+    line: usize,
+    name: []const u8,
+    data: []const vin.Node,
+
+    pub fn test_fn(ctx: *const anyopaque, render: *anyopaque) vin.AstError![]const vin.Node {
+        _ = ctx;
+        _ = render;
+
+        return vin.AstError.TemplateSyntaxError;
+    }
+};
+
+fn tag_addstrings_fn2(parser: *vin.Parser, rest: []const vin.Token, line: usize, out: *std.ArrayList(vin.Node)) vin.CompileError!void {
+    var ts: vin.Stream = .{ .toks = rest, .p = parser };
+    const name = try ts.expect(.name, line, "expected a addstrings name");
+    const body = try parser.parseBody(&.{"endaddstrings"});
+
+    const h = TestH2{
+        .line = line,
+        .name = name.text,
+        .data = body.nodes,
+    };
+
+    const def = try parser.arena.create(vin.ast.Generic);
+    def.* = .{
+        .ctx = &h,
+        .renderFn = TestH2.test_fn,
+        .line = line,
+    };
+
+    try out.append(parser.arena, .{ .generic = def.* });
+}
+
+test "Env addTag fail 2" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    try env.addTag("addstrings", tag_addstrings_fn2);
+
+    var tpl = try env.compile("<>{% addstrings title %}123{% endaddstrings %}", null);
+    defer tpl.deinit();
+
+    var diag: vin.Diagnostic = undefined;
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .str = "user",
+    });
+    const out = tpl.render(alloc, ctx, &diag);
+
+    try testing.expectError(error.TemplateSyntaxError, out);
+
+    const msg = try alloc.print("{f}", .{diag});
+    try testing.expectEqualStrings("line 1: tag use invalid", msg);
+}

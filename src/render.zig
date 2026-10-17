@@ -371,7 +371,9 @@ pub const Renderer = struct {
     // ── templates: loading, the inheritance chain, blocks ───────────────────
 
     pub fn renderGeneric(self: *Renderer, g: ast.Generic) Error!void {
-        const v = try g.renderFn(g.ctx, self);
+        const v = g.renderFn(g.ctx, self) catch |err| {
+            return self.fail(g.line, "tag use invalid", .{}, err);
+        };
         try self.renderNodes(v);
     }
 
