@@ -49,6 +49,8 @@ pub const Pair = struct {
 pub const Map = struct {
     pairs: []const Pair,
 
+    pub const empty: Map = .{ .pairs = &.{} };
+
     pub fn create(gpa: Allocator, pairs: []const Pair) !Map {
         const val_ptr = try gpa.create(Map);
         val_ptr.* = .{ 
@@ -72,6 +74,8 @@ pub const Map = struct {
 /// way a `{% set %}` inside a `{% for %}` body can outlive the loop's scope.
 pub const Namespace = struct {
     pairs: std.ArrayList(Pair) = .empty,
+
+    pub const empty: Namespace = .{ .pairs = .empty };
 
     pub fn create(gpa: Allocator) !*Namespace {
         const val_ptr = try gpa.create(Namespace);
@@ -175,12 +179,16 @@ pub const Value = union(enum) {
         return .{ .string = .{ .bytes = bytes } };
     }
 
-    pub fn markup(bytes: []const u8) Value {
+    pub fn fromMarkup(bytes: []const u8) Value {
         return .{ .string = .{ .bytes = bytes, .safe = true } };
     }
 
     pub fn fromList(list: []const Value) Value {
         return .{ .list = list };
+    }
+
+    pub fn fromTuple(tuple: []const Value) Value {
+        return .{ .tuple = tuple };
     }
 
     pub fn fromMap(map: Map) Value {
@@ -195,8 +203,127 @@ pub const Value = union(enum) {
         return .{ .loop = loop };
     }
 
+    pub fn fromMacro(macro: MacroRef) Value {
+        return .{ .macro = macro };
+    }
+
     pub fn isUndefined(self: Value) bool {
         return self == .undef;
+    }
+
+    pub fn isNone(self: Value) bool {
+        return self == .none;
+    }
+
+    pub fn isBool(self: Value) bool {
+        return self == .boolean;
+    }
+
+    pub fn isInt(self: Value) bool {
+        return self == .integer;
+    }
+
+    pub fn isFloat(self: Value) bool {
+        return self == .float;
+    }
+
+    pub fn isString(self: Value) bool {
+        return self == .string;
+    }
+
+    pub fn isArray(self: Value) bool {
+        return switch (self) {
+            .list, .tuple => return true,
+            else => return false,
+        };
+    }
+
+    pub fn isMap(self: Value) bool {
+        return switch (self) {
+            .map, .namespace => return true,
+            else => return false,
+        };
+    }
+
+    pub fn isLoop(self: Value) bool {
+        return self == .loop;
+    }
+
+    pub fn isMacro(self: Value) bool {
+        return self == .macro;
+    }
+
+    pub fn toBool(self: Value) ?bool {
+        if (self == .boolean) {
+            return self.boolean;
+        }
+
+        return null;
+    }
+
+    pub fn toInt(self: Value) ?i64 {
+        if (self == .integer) {
+            return self.integer;
+        }
+
+        return null;
+    }
+
+    pub fn toFloat(self: Value) ?f64 {
+        if (self == .float) {
+            return self.float;
+        }
+
+        return null;
+    }
+
+    pub fn toString(self: Value) ?Str {
+        if (self == .string) {
+            return self.string;
+        }
+
+        return null;
+    }
+
+    pub fn toArray(self: Value) ?[]const Value {
+        switch (self) {
+            .list, .tuple => |v| {
+                return v;
+            },
+            else => {},
+        }
+
+        return null;
+    }
+
+    pub fn toMap(self: Value, gpa: Allocator) ?[]const Pair {
+        switch (self) {
+            .map => |v| {
+                return v.pairs;
+            },
+            .namespace => |v| {
+                return v.pairs.toOwnedSlice(gpa) catch &.{};
+            },
+            else => {},
+        }
+
+        return null;
+    }
+
+    pub fn toLoop(self: Value) ?*Loop {
+        if (self == .loop) {
+            return self.loop;
+        }
+
+        return null;
+    }
+
+    pub fn toMacro(self: Value) ?MacroRef {
+        if (self == .macro) {
+            return self.macro;
+        }
+
+        return null;
     }
 
     /// Python truthiness: 0, 0.0, "", [], {}, None, False are falsey.

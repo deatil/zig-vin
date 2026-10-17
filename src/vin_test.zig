@@ -689,3 +689,94 @@ test "Env addTag fail 2" {
     const msg = try alloc.print("{f}", .{diag});
     try testing.expectEqualStrings("line 1: tag use invalid", msg);
 }
+
+test "Value is and to" {
+    const alloc = testing.allocator;
+
+    {
+        const v = vin.Value.fromBool(true);
+        try testing.expectEqual(true, v.isBool());
+        try testing.expectEqual(true, v.toBool().?);
+    }
+    {
+        const v = vin.Value.fromInt(6);
+        try testing.expectEqual(true, v.isInt());
+        try testing.expectEqual(false, v.isBool());
+        try testing.expectEqual(6, v.toInt().?);
+    }
+    {
+        const v = vin.Value.fromFloat(7.6);
+        try testing.expectEqual(true, v.isFloat());
+        try testing.expectEqual(7.6, v.toFloat().?);
+    }
+    {
+        const v = vin.Value.fromString("test-data");
+        try testing.expectEqual(true, v.isString());
+        try testing.expectEqual("test-data", v.toString().?.bytes);
+    }
+    {
+        const v = vin.Value.fromMarkup("test-data2");
+        try testing.expectEqual(true, v.isString());
+        try testing.expectEqual("test-data2", v.toString().?.bytes);
+    }
+    {
+        const list: []const vin.Value = &.{
+            .fromInt(8),
+            .fromString("test"),
+        };
+        const v = vin.Value.fromList(list);
+        try testing.expectEqual(true, v.isArray());
+        try testing.expectEqual(list, v.toArray().?);
+    }
+    {
+        const list: []const vin.Value = &.{
+            .fromInt(8),
+            .fromString("test"),
+        };
+        const v = vin.Value.fromTuple(list);
+        try testing.expectEqual(true, v.isArray());
+        try testing.expectEqual(list, v.toArray().?);
+    }
+    {
+        const m: vin.Map = .empty;
+        const v = vin.Value.fromMap(m);
+        try testing.expectEqual(true, v.isMap());
+        try testing.expectEqual(m.pairs, v.toMap(alloc).?);
+    }
+    {
+        var m: vin.Namespace = .empty;
+        const v = vin.Value.fromNamespace(&m);
+        try testing.expectEqual(true, v.isMap());
+        try testing.expectEqual(m.pairs.toOwnedSlice(alloc) catch &.{}, v.toMap(alloc).?);
+    }
+    {
+        var m: vin.value.Loop = .{
+            .items = &.{
+                .fromInt(8),
+                .fromString("test"),
+            },
+        };
+        const v = vin.Value.fromLoop(&m);
+        try testing.expectEqual(true, v.isLoop());
+        try testing.expectEqual(m.items, v.toLoop().?.items);
+    }
+    {
+        const m: vin.value.MacroRef = .{
+            .name = "test",
+            .impl = &.{
+                vin.Value.fromInt(8),
+            },
+        };
+        const v: vin.Value = .fromMacro(m);
+        try testing.expectEqual(true, v.isMacro());
+        try testing.expectEqual(m, v.toMacro().?);
+    }
+    {
+        const v: vin.Value = .{ .undef = .{ .name = "test" } };
+        try testing.expectEqual(true, v.isUndefined());
+    }
+    {
+        const v: vin.Value = .none;
+        try testing.expectEqual(true, v.isNone());
+    }
+}
