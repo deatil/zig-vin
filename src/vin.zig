@@ -97,7 +97,7 @@ pub const FilterFn = filters.Fn;
 pub const TestFn = filters.TestFn;
 pub const GlobalFn = filters.GlobalFn;
 pub const MethodFn = filters.MethodFn;
-pub const tagFn = parser.tagFn;
+pub const TagFn = parser.TagFn;
 pub const FilterArgs = filters.Args;
 pub const FilterError = filters.Error;
 pub const FilterKwarg = filters.Kwarg;
@@ -113,7 +113,7 @@ pub const Environment = struct {
     tests: std.StringHashMapUnmanaged(TestFn) = .empty,
     globals: std.StringHashMapUnmanaged(GlobalFn) = .empty,
     methods: std.StringHashMapUnmanaged(MethodFn) = .empty,
-    tags: std.StringHashMapUnmanaged(tagFn) = .empty,
+    tags: std.StringHashMapUnmanaged(TagFn) = .empty,
     /// Optional; without one, any composition tag is `error.NoLoader`.
     loader: ?Loader = null,
 
@@ -180,7 +180,7 @@ pub const Environment = struct {
         try self.methods.put(self.gpa, name, func);
     }
 
-    pub fn addTag(self: *Environment, name: []const u8, func: tagFn) error{OutOfMemory}!void {
+    pub fn addTag(self: *Environment, name: []const u8, func: TagFn) error{OutOfMemory}!void {
         try self.tags.put(self.gpa, name, func);
     }
 
@@ -311,7 +311,7 @@ pub const Environment = struct {
         return self.methods.get(name);
     }
 
-    fn tagLookup(ctx: *const anyopaque, name: []const u8) ?tagFn {
+    fn tagLookup(ctx: *const anyopaque, name: []const u8) ?TagFn {
         const self: *const Environment = @ptrCast(@alignCast(ctx));
         return self.tags.get(name);
     }
