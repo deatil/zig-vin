@@ -285,6 +285,14 @@ pub const Value = union(enum) {
         return null;
     }
 
+    pub fn toStrings(self: Value) ?[]const u8 {
+        if (self == .string) {
+            return self.string.bytes;
+        }
+
+        return null;
+    }
+
     pub fn toArray(self: Value) ?[]const Value {
         switch (self) {
             .list, .tuple => |v| {

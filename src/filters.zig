@@ -1288,7 +1288,7 @@ fn fYesno(ctx: *Ctx, input: Value, args: Args) Error!Value {
     var choices: [3][]const u8 = .{ "yes", "no", "maybe" };
 
     const param_v = args.get(0, "param") orelse Value.empty_string;
-    const param_string = if (param_v.toString()) |v| v.bytes else "";
+    const param_string = param_v.toStrings() orelse "";
 
     const custom_count = std.mem.count(u8, param_string, ",");
     if (param_string.len > 0) {
@@ -1313,6 +1313,49 @@ fn fYesno(ctx: *Ctx, input: Value, args: Args) Error!Value {
     }
 
     return .fromString(choices[2]);
+}
+
+fn fFilesizeformat(ctx: *Ctx, input: Value, args: Args) Error!Value {
+    const arena = ctx.arena;
+    _ = args;
+
+    var bytes = input.toInt() orelse 0;
+
+    const negative = if (bytes < 0) true else false;
+    if (negative) {
+        bytes = -bytes;
+    }
+
+    var size: f64 = @floatFromInt(bytes);
+
+    const units: [6][]const u8 = .{ "bytes", "KB", "MB", "GB", "TB", "PB" };
+    var unit_idx: usize = 0;
+
+    while (size >= 1024 and (unit_idx < units.len - 1)) {
+        size = @divTrunc(size, 1024);
+        unit_idx += 1;
+    }
+
+    const nbsp = "\\u00a0";
+
+    var result: []const u8 = undefined;
+    if (unit_idx == 0) {
+        if (bytes == 1) {
+            const unit = "byte";
+            result = try arena.print("{d}{s}{s}", .{bytes, nbsp, unit});
+        } else {
+            const unit = "bytes";
+            result = try arena.print("{d}{s}{s}", .{bytes, nbsp, unit});
+        }
+    } else {
+        result = try arena.print("{:.1}{s}{s}", .{size, nbsp, units[unit_idx]});
+    }
+
+    if (negative) {
+        result = try arena.print("-{s}", .{result});
+    }
+
+    return .fromString(result);
 }
 
 pub const builtin_filters = [_]Entry{
@@ -1363,6 +1406,7 @@ pub const builtin_filters = [_]Entry{
     .{ .name = "wordcount", .func = fWordcount },
     .{ .name = "xmlattr", .func = fXmlattr },
     .{ .name = "yesno", .func = fYesno },
+    .{ .name = "filesizeformat", .func = fFilesizeformat },
 };
 
 // ── tests ────────────────────────────────────────────────────────────────

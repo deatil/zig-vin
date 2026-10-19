@@ -715,6 +715,11 @@ test "Value is and to" {
         try testing.expectEqual("test-data", v.toString().?.bytes);
     }
     {
+        const v = vin.Value.fromString("test-data");
+        try testing.expectEqual(true, v.isString());
+        try testing.expectEqual("test-data", v.toStrings().?);
+    }
+    {
         const v = vin.Value.fromMarkup("test-data2");
         try testing.expectEqual(true, v.isString());
         try testing.expectEqual("test-data2", v.toString().?.bytes);

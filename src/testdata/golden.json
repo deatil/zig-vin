@@ -2925,6 +2925,48 @@
     "trim_blocks": false
   },
   {
+    "autoescape": false,
+    "context": "{}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "filesizeformat_1",
+    "out": "0\\u00a0bytes,1\\u00a0byte,12\\u00a0bytes",
+    "status": "ok",
+    "strict": false,
+    "template": "{{ 0|filesizeformat }},{{ 1|filesizeformat }},{{ 12|filesizeformat }}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
+    "context": "{}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "filesizeformat_2",
+    "out": "1023\\u00a0bytes,1.0\\u00a0KB,1.0\\u00a0KB,1.0\\u00a0MB",
+    "status": "ok",
+    "strict": false,
+    "template": "{{ 1023|filesizeformat }},{{ 1024|filesizeformat }},{{ 1025|filesizeformat }},{{ 1048577|filesizeformat }}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
+    "context": "{}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "filesizeformat_3",
+    "out": "1.0\\u00a0GB,1.0\\u00a0TB,1.0\\u00a0PB",
+    "status": "ok",
+    "strict": false,
+    "template": "{{ 1073741825|filesizeformat }},{{ 1099511627778|filesizeformat }},{{ 1125899906842625|filesizeformat }}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
    "autoescape": false,
    "context": "{}",
    "expect_error": false,
