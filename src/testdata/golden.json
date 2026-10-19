@@ -2883,6 +2883,48 @@
    "trim_blocks": false
   },
   {
+    "autoescape": false,
+    "context": "{}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "yesno_1",
+    "out": "yes,no,maybe",
+    "status": "ok",
+    "strict": false,
+    "template": "{{ true|yesno }},{{ false|yesno }},{{ 'may'|yesno }}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
+    "context": "{}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "yesno_2",
+    "out": "yes1,no1,maybe1",
+    "status": "ok",
+    "strict": false,
+    "template": "{{ true|yesno('yes1,no1,maybe1') }},{{ false|yesno('yes1,no1,maybe1') }},{{ 'may'|yesno('yes1,no1,maybe1') }}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
+    "context": "{}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "yesno_3",
+    "out": "yes1,no1,maybe",
+    "status": "ok",
+    "strict": false,
+    "template": "{{ true|yesno('yes1,no1') }},{{ false|yesno('yes1,no1') }},{{ 'may'|yesno('yes1,no1') }}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
    "autoescape": false,
    "context": "{}",
    "expect_error": false,

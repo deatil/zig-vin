@@ -1282,7 +1282,38 @@ fn jsonString(w: *Writer, s: []const u8) Error!void {
     w.writeAll("\"") catch return error.OutOfMemory;
 }
 
-// ── registry ────────────────────────────────────────────────────────────────
+fn fYesno(ctx: *Ctx, input: Value, args: Args) Error!Value {
+    _ = ctx;
+
+    var choices: [3][]const u8 = .{ "yes", "no", "maybe" };
+
+    const param_v = args.get(0, "param") orelse Value.empty_string;
+    const param_string = if (param_v.toString()) |v| v.bytes else "";
+
+    const custom_count = std.mem.count(u8, param_string, ",");
+    if (param_string.len > 0) {
+        if (custom_count + 1 > 3 or custom_count + 1 < 2) {
+            return error.BadArgument;
+        }
+    }
+
+    var custom_choices = std.mem.tokenizeAny(u8, param_string, ",");
+    var i: usize = 0;
+    while (custom_choices.next()) |choice| {
+        choices[i] = choice;
+        i += 1;
+    }
+
+    if (input.toBool()) |val| {
+        if (val) {
+            return .fromString(choices[0]);
+        }
+
+        return .fromString(choices[1]);
+    }
+
+    return .fromString(choices[2]);
+}
 
 pub const builtin_filters = [_]Entry{
     .{ .name = "abs", .func = fAbs },
@@ -1331,7 +1362,10 @@ pub const builtin_filters = [_]Entry{
     .{ .name = "urlencode", .func = fUrlencode },
     .{ .name = "wordcount", .func = fWordcount },
     .{ .name = "xmlattr", .func = fXmlattr },
+    .{ .name = "yesno", .func = fYesno },
 };
+
+// ── tests ────────────────────────────────────────────────────────────────
 
 fn tDefined(ctx: *Ctx, input: Value, args: Args) Error!bool {
     _ = ctx;
