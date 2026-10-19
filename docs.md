@@ -296,7 +296,7 @@ surface halfway through a render", which was a false absolute.
 | `slice` | `sort` | `string` | `striptags` |
 | `sum` | `title` | `tojson` | `trim` |
 | `truncate` | `unique` | `upper` | `urlencode` |
-| `wordcount` | `xmlattr` | | |
+| `wordcount` | `xmlattr` | `yesno` | `filesizeformat` |
 
 Keyword arguments work as in the reference (`sort(reverse=true,
 attribute='n')`, `join(', ', attribute='name')`, `default('x', true)`,
