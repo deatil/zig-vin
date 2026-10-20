@@ -215,6 +215,10 @@ pub const Value = union(enum) {
         return .{ .macro = macro };
     }
 
+    pub fn fromCallable(callable: CallRef) Value {
+        return .{ .callable = callable };
+    }
+
     pub fn isUndefined(self: Value) bool {
         return self == .undef;
     }
@@ -259,6 +263,10 @@ pub const Value = union(enum) {
 
     pub fn isMacro(self: Value) bool {
         return self == .macro;
+    }
+
+    pub fn isCallable(self: Value) bool {
+        return self == .callable;
     }
 
     pub fn toBool(self: Value) ?bool {
@@ -337,6 +345,14 @@ pub const Value = union(enum) {
     pub fn toMacro(self: Value) ?MacroRef {
         if (self == .macro) {
             return self.macro;
+        }
+
+        return null;
+    }
+
+    pub fn toCallable(self: Value) ?CallRef {
+        if (self == .callable) {
+            return self.callable;
         }
 
         return null;

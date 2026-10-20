@@ -790,16 +790,25 @@ const TestBA = struct {
     name: []const u8,
 
     pub fn test_fn(ctx: *anyopaque, fctx: *vin.FilterCtx, args: vin.FilterArgs) vin.FilterError!vin.Value {
+        _ = fctx;
+
         const name_val = args.get(0, "name") orelse return error.BadArgument;
         const n = name_val.toStrings() orelse "";
 
-        const self: *const TestBA = @ptrCast(@alignCast(ctx));
+        var self: *TestBA = @ptrCast(@alignCast(ctx));
 
-        const v = vin.valueFrom(fctx.arena, .{
-            .n1 = self.name,
-            .n2 = n,
-        });
-        return v;
+        if (std.mem.eql(u8, n, "update")) {
+            self.name = "test-name1";
+            return .fromString(self.name);
+        }
+        if (std.mem.eql(u8, n, "vget")) {
+            return .fromString(self.name);
+        }
+        if (std.mem.eql(u8, n, "reset")) {
+            self.name = "test-data";
+        }
+
+        return .empty_string;
     }
 };
 
@@ -811,23 +820,23 @@ test "value callable" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile("<>{{ data.calling('name') }}", null);
+    var tpl = try env.compile("<>{{ data.calling('vget') }},{{ data.calling('update') }},{{ data.calling('reset') }}{{ data.calling('vget') }}", null);
     defer tpl.deinit();
 
     var ba: TestBA = .{
         .name = "test-data",
     };
-    const val: vin.Value = .{
-        .callable = .{
-            .ctx = &ba,
-            .call = TestBA.test_fn,
-        }
-    };
+    const val: vin.Value = .fromCallable(.{
+        .ctx = &ba,
+        .call = TestBA.test_fn,
+    });
+
+    try testing.expectEqual(true, val.isCallable());
 
     const ctx = try vin.valueFrom(alloc, .{
         .data = val,
     });
     const out = try tpl.render(alloc, ctx, null);
 
-    try testing.expectEqualStrings("<>{'n1': 'test-data', 'n2': 'name'}", out);
+    try testing.expectEqualStrings("<>test-data,test-name1,test-data", out);
 }
