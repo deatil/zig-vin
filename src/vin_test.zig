@@ -785,3 +785,49 @@ test "Value is and to" {
         try testing.expectEqual(true, v.isNone());
     }
 }
+
+const TestBA = struct {
+    name: []const u8,
+
+    pub fn test_fn(ctx: *anyopaque, fctx: *vin.FilterCtx, args: vin.FilterArgs) vin.FilterError!vin.Value {
+        const name_val = args.get(0, "name") orelse return error.BadArgument;
+        const n = name_val.toStrings() orelse "";
+
+        const self: *const TestBA = @ptrCast(@alignCast(ctx));
+
+        const v = vin.valueFrom(fctx.arena, .{
+            .n1 = self.name,
+            .n2 = n,
+        });
+        return v;
+    }
+};
+
+test "value callable" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile("<>{{ data.calling('name') }}", null);
+    defer tpl.deinit();
+
+    var ba: TestBA = .{
+        .name = "test-data",
+    };
+    const val: vin.Value = .{
+        .callable = .{
+            .ctx = &ba,
+            .call = TestBA.test_fn,
+        }
+    };
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .data = val,
+    });
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("<>{'n1': 'test-data', 'n2': 'name'}", out);
+}

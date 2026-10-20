@@ -42,7 +42,6 @@ pub const Limits = struct {
 };
 
 pub const TagFn = *const fn (parser: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void;
-pub const genericFn = *const fn (ctx: *const anyopaque, render: *anyopaque) ast.Error![]const Node;
 
 /// How the parser asks the environment whether a filter/test name exists.
 pub const Registry = struct {

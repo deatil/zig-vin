@@ -2,6 +2,8 @@ const std = @import("std");
 const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
 
+const filters = @import("filters.zig");
+
 pub const Error = error{
     OutOfMemory,
     /// An operation that an undefined value does not support.
@@ -137,6 +139,11 @@ pub const MacroRef = struct {
     impl: *const anyopaque,
 };
 
+pub const CallRef = struct {
+    ctx: *anyopaque,
+    call: *const fn (ctx: *anyopaque, fctx: *filters.Ctx, args: filters.Args) Error!Value,
+};
+
 pub const Value = union(enum) {
     undef: Undefined,
     none,
@@ -153,6 +160,7 @@ pub const Value = union(enum) {
     namespace: *Namespace,
     loop: *Loop,
     macro: MacroRef,
+    callable: CallRef,
 
     pub const empty_string: Value = .{ .string = .{ .bytes = "" } };
 
@@ -350,6 +358,7 @@ pub const Value = union(enum) {
             .namespace => true,
             .loop => |l| l.items.len != 0,
             .macro => true,
+            .callable => true,
         };
     }
 
@@ -366,6 +375,7 @@ pub const Value = union(enum) {
             .tuple => "tuple",
             .macro => "macro",
             .map, .namespace, .loop => "dict",
+            .callable => "callable",
         };
     }
 };

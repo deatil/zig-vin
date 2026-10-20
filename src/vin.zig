@@ -3,8 +3,7 @@ const Io = std.Io;
 const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
 
-const lexer = @import("lexer.zig");
-
+pub const lexer = @import("lexer.zig");
 pub const ast = @import("ast.zig");
 pub const parser = @import("parser.zig");
 pub const renders = @import("render.zig");
