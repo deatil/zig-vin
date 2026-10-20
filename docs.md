@@ -56,7 +56,7 @@ divergence D1 in SPEC.md.
 a file extension (this module has no file loader), and `|safe`/`|escape`
 behave as markupsafe's `Markup` does in both settings.
 
-# Desc
+## Desc
 
 A Jinja2-compatible template engine in pure Zig. It takes a template string and
 a context value and produces bytes: `{{ expression }}` output, `{# comments #}`,
