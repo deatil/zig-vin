@@ -106,6 +106,49 @@ pub const DynMapLoader = struct {
     }
 };
 
+pub const MultiLoader = struct {
+    gpa: Allocator,
+    loaders: std.ArrayList(Loader) = .empty,
+
+    const Self = @This();
+
+    pub fn create(gpa: Allocator) !*Self {
+        const loader_ptr = try gpa.create(Self);
+        loader_ptr.* = .{
+            .gpa = gpa,
+            .loaders = .empty,
+        };
+
+        return loader_ptr;
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.loaders.deinit(self.gpa);
+        self.* = undefined;
+    }
+
+    pub fn add(self: *Self, new_loader: Loader) !void {
+        try self.loaders.append(self.gpa, new_loader);
+    }
+
+    pub fn loader(self: *const Self) Loader {
+        return .{ .ctx = self, .load = load };
+    }
+
+    fn load(ctx: *const anyopaque, arena: Allocator, name: []const u8) Error!?[]const u8 {
+        const self: *const Self = @ptrCast(@alignCast(ctx));
+        
+        for (self.loaders.items) |it| {
+            const ld = it.load(it.ctx, arena, name) catch continue;
+            if (ld) |data| {
+                return data;
+            }
+        }
+
+        return null;
+    }
+};
+
 pub const NameError = error{
     /// The name is empty, over the length cap, or has an empty component.
     MalformedName,

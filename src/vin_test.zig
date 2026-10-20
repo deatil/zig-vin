@@ -820,7 +820,7 @@ test "value callable" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile("<>{{ data.calling('vget') }},{{ data.calling('update') }},{{ data.calling('reset') }}{{ data.calling('vget') }}", null);
+    var tpl = try env.compile("<>{{ data.calling('vget') }},{{ data.calling('update') }},{{ data.calling('vget') }},{{ data.calling('reset') }}{{ data.calling('vget') }}", null);
     defer tpl.deinit();
 
     var ba: TestBA = .{
@@ -838,5 +838,55 @@ test "value callable" {
     });
     const out = try tpl.render(alloc, ctx, null);
 
-    try testing.expectEqualStrings("<>test-data,test-name1,test-data", out);
+    try testing.expectEqualStrings("<>test-data,test-name1,test-name1,test-data", out);
+}
+
+test "MultiLoader" {
+    const io = testing.io;
+    const alloc = testing.allocator;
+
+    var arena: std.heap.ArenaAllocator = .init(alloc);
+    defer arena.deinit();
+
+    const a = arena.allocator();
+
+    var map: *vin.DynMapLoader = try .create(a);
+    try map.put("sub/show1", @embedFile("testdata/views/sub2/show1.htm"));
+
+    const dl: *vin.DirLoader = try .create(
+        a, io, 
+        try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}), 
+        .{ 
+            .suffix = ".htm",
+        },
+    );
+
+    var ml: *vin.MultiLoader = try .create(a);
+    try ml.add(map.loader());
+    try ml.add(dl.loader());
+
+    var env = try vin.Environment.initWithLoader(a, .{}, ml.loader());
+    defer env.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+
+    {
+        const out = try env.renderTemplateAlloc("sub2/show1", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("show1", out);
+    }
+    {
+        const out = try env.renderTemplateAlloc("sub2/show2", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("show2", out);
+    }
+    {
+        const out = try env.renderTemplateAlloc("sub2/show3", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("show3", out);
+    }
+    {
+        const out = env.renderTemplateAlloc("sub2/show5", ctx, null);
+        try testing.expectError(error.LoaderInvalid, out);
+    }
 }

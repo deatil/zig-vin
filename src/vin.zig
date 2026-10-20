@@ -42,6 +42,7 @@ pub const Loader = loaders.Loader;
 pub const MapLoader = loaders.MapLoader;
 pub const DirLoader = loaders.DirLoader;
 pub const DynMapLoader = loaders.DynMapLoader;
+pub const MultiLoader = loaders.MultiLoader;
 pub const LoaderError = loaders.Error;
 /// The lexical half of `DirLoader`'s containment, exported so a caller writing
 /// its own filesystem loader can reuse exactly the same rules.

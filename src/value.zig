@@ -411,6 +411,7 @@ pub fn from(arena: Allocator, v: anytype) Error!Value {
     if (T == Str) return .{ .string = v };
     if (T == *Namespace) return .{ .namespace = v };
     if (T == *Loop) return .{ .loop = v };
+    if (T == CallRef) return .{ .callable = v };
 
     return switch (@typeInfo(T)) {
         .null, .void => .none,
