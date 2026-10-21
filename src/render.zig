@@ -1394,16 +1394,11 @@ pub const Renderer = struct {
 
         if (obj == .callable) {
             const c = obj.callable;
-            if (std.mem.eql(u8, name, "calling")) {
-                if (args.pos.len == 0) {
-                    return self.fail(line, "'{s}' method bad argument", .{name}, error.BadArgument);
-                }
 
-                var ctx = self.filterCtx();
-                return c.call(c.ctx, &ctx, args) catch |err| {
-                    return self.fail(line, "'{s}' method call fail", .{name}, err);
-                };
-            }
+            var ctx = self.filterCtx();
+            return c.call(c.ctx, &ctx, name, args) catch |err| {
+                return self.fail(line, "'{s}' method invalid call", .{name}, err);
+            };
         }
 
         if (self.lookup.method(self.lookup.ctx, name)) |fn_ptr| {

@@ -22,6 +22,7 @@ pub const Str = value.Str;
 pub const Pair = value.Pair;
 pub const Map = value.Map;
 pub const Namespace = value.Namespace;
+pub const Callable = value.Callable;
 pub const Undefined = value.Undefined;
 
 // first code from https://github.com/zaxified/zig-libs
@@ -89,18 +90,18 @@ pub const Options = struct {
 pub const AstError = ast.Error;
 pub const CompileError = parser.Error;
 pub const RenderError = renders.Error;
-pub const Error = CompileError || RenderError;
+pub const Error = AstError || CompileError || RenderError;
 
 /// Filter/test authoring surface, for `Environment.addFilter`/`addTest`/`addGlobal`/`addMethod`.
 pub const FilterCtx = filters.Ctx;
+pub const FilterArgs = filters.Args;
+pub const FilterError = filters.Error;
+pub const FilterKwarg = filters.Kwarg;
 pub const FilterFn = filters.Fn;
 pub const TestFn = filters.TestFn;
 pub const GlobalFn = filters.GlobalFn;
 pub const MethodFn = filters.MethodFn;
 pub const TagFn = parser.TagFn;
-pub const FilterArgs = filters.Args;
-pub const FilterError = filters.Error;
-pub const FilterKwarg = filters.Kwarg;
 
 /// Owns the filter and test registries and the syntax options. Compiling a
 /// template resolves every filter and test name against this environment, so

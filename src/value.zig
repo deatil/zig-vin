@@ -17,6 +17,9 @@ pub const Error = error{
     BadArgument,
     /// Reached a corner this engine deliberately does not implement.
     Unsupported,
+    // for callable
+    InvalidMethod,
+    InvalidExec,
 };
 
 /// A string plus the one bit markupsafe carries: whether it is already markup
@@ -118,6 +121,11 @@ pub const Loop = struct {
     last_changed: ?[]const Value = null,
 };
 
+pub const Callable = struct {
+    ctx: *anyopaque,
+    call: *const fn (ctx: *anyopaque, fctx: *filters.Ctx, method: []const u8, args: filters.Args) Error!Value,
+};
+
 /// A missing name, or the result of an operation the reference implementation
 /// answers with `Undefined`. `name` is what the message will blame.
 pub const Undefined = struct {
@@ -139,11 +147,6 @@ pub const MacroRef = struct {
     impl: *const anyopaque,
 };
 
-pub const CallRef = struct {
-    ctx: *anyopaque,
-    call: *const fn (ctx: *anyopaque, fctx: *filters.Ctx, args: filters.Args) Error!Value,
-};
-
 pub const Value = union(enum) {
     undef: Undefined,
     none,
@@ -159,8 +162,8 @@ pub const Value = union(enum) {
     map: Map,
     namespace: *Namespace,
     loop: *Loop,
+    callable: Callable,
     macro: MacroRef,
-    callable: CallRef,
 
     pub const empty_string: Value = .{ .string = .{ .bytes = "" } };
 
@@ -215,7 +218,7 @@ pub const Value = union(enum) {
         return .{ .macro = macro };
     }
 
-    pub fn fromCallable(callable: CallRef) Value {
+    pub fn fromCallable(callable: Callable) Value {
         return .{ .callable = callable };
     }
 
@@ -362,7 +365,7 @@ pub const Value = union(enum) {
         return null;
     }
 
-    pub fn toCallable(self: Value) ?CallRef {
+    pub fn toCallable(self: Value) ?Callable {
         if (self == .callable) {
             return self.callable;
         }
@@ -434,7 +437,7 @@ pub fn from(arena: Allocator, v: anytype) Error!Value {
     if (T == Str) return .{ .string = v };
     if (T == *Namespace) return .{ .namespace = v };
     if (T == *Loop) return .{ .loop = v };
-    if (T == CallRef) return .{ .callable = v };
+    if (T == Callable) return .{ .callable = v };
 
     return switch (@typeInfo(T)) {
         .null, .void => .none,

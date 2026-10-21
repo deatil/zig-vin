@@ -811,23 +811,28 @@ test "Value is and to" {
 const TestBA = struct {
     name: []const u8,
 
-    pub fn test_fn(ctx: *anyopaque, fctx: *vin.FilterCtx, args: vin.FilterArgs) vin.FilterError!vin.Value {
+    pub fn test_fn(ctx: *anyopaque, fctx: *vin.FilterCtx, method: []const u8, args: vin.FilterArgs) vin.FilterError!vin.Value {
         _ = fctx;
-
-        const name_val = args.get(0, "name") orelse return error.BadArgument;
-        const n = name_val.toStrings() orelse "";
 
         var self: *TestBA = @ptrCast(@alignCast(ctx));
 
-        if (std.mem.eql(u8, n, "update")) {
+        if (std.mem.eql(u8, method, "update")) {
             self.name = "test-name1";
             return .fromString(self.name);
         }
-        if (std.mem.eql(u8, n, "vget")) {
+        if (std.mem.eql(u8, method, "vget")) {
             return .fromString(self.name);
         }
-        if (std.mem.eql(u8, n, "reset")) {
+        if (std.mem.eql(u8, method, "reset")) {
             self.name = "test-data";
+        }
+        if (std.mem.eql(u8, method, "put")) {
+            const name_val = args.get(0, "name") orelse return error.BadArgument;
+            const n = name_val.toStrings() orelse "";
+            return .fromString(n);
+        }
+        if (std.mem.eql(u8, method, "errors")) {
+            return vin.FilterError.InvalidMethod;
         }
 
         return .empty_string;
@@ -842,7 +847,7 @@ test "value callable" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile("<>{{ data.calling('vget') }},{{ data.calling('update') }},{{ data.calling('vget') }},{{ data.calling('reset') }}{{ data.calling('vget') }}", null);
+    var tpl = try env.compile("<>{{ data.vget() }},{{ data.update() }},{{ data.vget() }},{{ data.reset() }}{{ data.vget() }},{{ data.put('pikef') }}", null);
     defer tpl.deinit();
 
     var ba: TestBA = .{
@@ -860,7 +865,41 @@ test "value callable" {
     });
     const out = try tpl.render(alloc, ctx, null);
 
-    try testing.expectEqualStrings("<>test-data,test-name1,test-name1,test-data", out);
+    try testing.expectEqualStrings("<>test-data,test-name1,test-name1,test-data,pikef", out);
+}
+
+test "value callable error" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile("<>{{ data.errors() }}", null);
+    defer tpl.deinit();
+
+    var ba: TestBA = .{
+        .name = "test-data",
+    };
+    const val: vin.Value = .fromCallable(.{
+        .ctx = &ba,
+        .call = TestBA.test_fn,
+    });
+
+    try testing.expectEqual(true, val.isCallable());
+
+    var diag: vin.Diagnostic = undefined;
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .data = val,
+    });
+    const out = tpl.render(alloc, ctx, &diag);
+
+    try testing.expectError(error.InvalidMethod, out);
+
+    const msg = try alloc.print("{f}", .{diag});
+    try testing.expectEqualStrings("line 1: 'errors' method invalid call", msg);
 }
 
 test "MultiLoader" {
