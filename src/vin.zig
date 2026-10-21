@@ -186,6 +186,26 @@ pub const Environment = struct {
         try self.tags.put(self.gpa, name, func);
     }
 
+    pub fn banFilter(self: *Environment, name: []const u8) bool {
+        return self.filters.remove(name);
+    }
+
+    pub fn banTest(self: *Environment, name: []const u8) bool {
+        return self.tests.remove(name);
+    }
+
+    pub fn banGlobal(self: *Environment, name: []const u8) bool {
+        return self.globals.remove(name);
+    }
+
+    pub fn banMethod(self: *Environment, name: []const u8) bool {
+        return self.methods.remove(name);
+    }
+
+    pub fn banTag(self: *Environment, name: []const u8) bool {
+        return self.tags.remove(name);
+    }
+
     /// Parse `source` into a reusable `Template`. The template copies the
     /// source, so `source` need not outlive the call. `diag` (optional) is
     /// filled in on `error.TemplateSyntaxError`.

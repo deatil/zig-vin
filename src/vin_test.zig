@@ -1008,3 +1008,65 @@ test "for loop with continue and break fail" {
         try testing.expectEqualStrings("line 1: break outside of a loop", msg);
     }
 }
+
+fn fLength_test_fn(ctx: *vin.FilterCtx, input: vin.Value, args: vin.FilterArgs) vin.FilterError!vin.Value {
+    _ = ctx;
+    _ = args;
+    return .{ .integer = @intCast(try value.length(input)) };
+}
+
+fn tOdd_test_fn(ctx: *vin.FilterCtx, input: vin.Value, args: vin.FilterArgs) vin.FilterError!bool {
+    _ = ctx;
+    _ = args;
+    if (input != .integer) return error.TypeMismatch;
+    return @mod(input.integer, 2) != 0;
+}
+
+test "env bans" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    {
+        try testing.expectEqual(false, env.filters.contains("test_filter"));
+        try env.addFilter("test_filter", fLength_test_fn);
+        try testing.expectEqual(true, env.filters.contains("test_filter"));
+        try testing.expectEqual(true, env.banFilter("test_filter"));
+        try testing.expectEqual(false, env.filters.contains("test_filter"));
+    }
+
+    {
+        try testing.expectEqual(false, env.tests.contains("test_tests"));
+        try env.addTest("test_tests", tOdd_test_fn);
+        try testing.expectEqual(true, env.tests.contains("test_tests"));
+        try testing.expectEqual(true, env.banTest("test_tests"));
+        try testing.expectEqual(false, env.tests.contains("test_tests"));
+    }
+
+    {
+        try testing.expectEqual(false, env.globals.contains("test_global"));
+        try env.addGlobal("test_global", greet3_fn);
+        try testing.expectEqual(true, env.globals.contains("test_global"));
+        try testing.expectEqual(true, env.banGlobal("test_global"));
+        try testing.expectEqual(false, env.globals.contains("test_global"));
+    }
+
+    {
+        try testing.expectEqual(false, env.methods.contains("test_methods"));
+        try env.addMethod("test_methods", cy_set_fn);
+        try testing.expectEqual(true, env.methods.contains("test_methods"));
+        try testing.expectEqual(true, env.banMethod("test_methods"));
+        try testing.expectEqual(false, env.methods.contains("test_methods"));
+    }
+
+    {
+        try testing.expectEqual(false, env.tags.contains("test_tags"));
+        try env.addTag("test_tags", tag_addstrings_fn);
+        try testing.expectEqual(true, env.tags.contains("test_tags"));
+        try testing.expectEqual(true, env.banTag("test_tags"));
+        try testing.expectEqual(false, env.tags.contains("test_tags"));
+    }
+}
