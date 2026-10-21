@@ -33,8 +33,8 @@ pub const MapLoader = struct {
 
     pub fn create(gpa: Allocator, entries: []const Entry) !*Self {
         const loader_ptr = try gpa.create(Self);
-        loader_ptr.* = .{ 
-            .entries = entries, 
+        loader_ptr.* = .{
+            .entries = entries,
         };
 
         return loader_ptr;
@@ -137,7 +137,7 @@ pub const MultiLoader = struct {
 
     fn load(ctx: *const anyopaque, arena: Allocator, name: []const u8) Error!?[]const u8 {
         const self: *const Self = @ptrCast(@alignCast(ctx));
-        
+
         for (self.loaders.items) |it| {
             const ld = it.load(it.ctx, arena, name) catch continue;
             if (ld) |data| {
@@ -238,10 +238,10 @@ pub const DirLoader = struct {
 
     pub fn create(gpa: Allocator, io: std.Io, root: std.Io.Dir, options: Options) !*Self {
         const loader_ptr = try gpa.create(Self);
-        loader_ptr.* = .{ 
-            .io = io, 
-            .root = root, 
-            .options = options, 
+        loader_ptr.* = .{
+            .io = io,
+            .root = root,
+            .options = options,
         };
 
         return loader_ptr;

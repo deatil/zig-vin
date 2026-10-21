@@ -188,8 +188,8 @@ pub const Environment = struct {
     /// source, so `source` need not outlive the call. `diag` (optional) is
     /// filled in on `error.TemplateSyntaxError`.
     pub fn compile(
-        self: *const Environment, 
-        source: []const u8, 
+        self: *const Environment,
+        source: []const u8,
         diag: ?*Diagnostic,
     ) CompileError!Template {
         var scratch: Diagnostic = .{};
@@ -217,10 +217,10 @@ pub const Environment = struct {
             .tag = tagLookup,
         }, .{ .max_nesting_depth = self.options.max_nesting_depth }, d);
 
-        return .{ 
-            .arena = arena, 
+        return .{
+            .arena = arena,
             .io = self.io,
-            .parsed = parsed, 
+            .parsed = parsed,
             .env = self,
         };
     }

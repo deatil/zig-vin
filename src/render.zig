@@ -1242,7 +1242,7 @@ pub const Renderer = struct {
 
     pub fn globalJoiner(self: *Renderer, args: filters.Args) Error!Value {
         _ = self;
-        
+
         // New form: joiner(input, index)
         const sep_v = args.get(0, "sep") orelse Value.empty_string;
         const idx_v = args.get(1, "index") orelse return error.BadArgument;

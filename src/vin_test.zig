@@ -14,10 +14,10 @@ test "DirLoader use dir" {
 
     const a = arena.allocator();
 
-    const dl: vin.DirLoader = .{ 
-        .io = io, 
-        .root = try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}), 
-        .options = .{ 
+    const dl: vin.DirLoader = .{
+        .io = io,
+        .root = try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}),
+        .options = .{
             .suffix = ".htm",
         },
     };
@@ -56,7 +56,7 @@ test "MapLoader renderTemplateAlloc" {
     const a = arena.allocator();
 
     var map: vin.MapLoader = .{ .entries = &.{
-        .{ .name = "base",   .source = @embedFile("testdata/views/base.htm") },
+        .{ .name = "base", .source = @embedFile("testdata/views/base.htm") },
         .{ .name = "show", .source = @embedFile("testdata/views/show.htm") },
         .{ .name = "sub/show1", .source = @embedFile("testdata/views/sub/show1.htm") },
         .{ .name = "sub/show2", .source = @embedFile("testdata/views/sub/show2.htm") },
@@ -96,10 +96,10 @@ test "DirLoader with json" {
 
     const a = arena.allocator();
 
-    const dl: vin.DirLoader = .{ 
-        .io = io, 
-        .root = try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}), 
-        .options = .{ 
+    const dl: vin.DirLoader = .{
+        .io = io,
+        .root = try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}),
+        .options = .{
             .suffix = ".htm",
         },
     };
@@ -108,7 +108,7 @@ test "DirLoader with json" {
     defer env.deinit();
 
     {
-        const text = 
+        const text =
             \\{"name": "test name"}
         ;
         const parsed = try std.json.parseFromSlice(std.json.Value, a, text, .{});
@@ -171,10 +171,10 @@ test "DirLoader with json 2" {
     var env = try vin.Environment.init(a, .{});
     defer env.deinit();
 
-    const dl: vin.DirLoader = .{ 
-        .io = io, 
-        .root = try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}), 
-        .options = .{ 
+    const dl: vin.DirLoader = .{
+        .io = io,
+        .root = try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}),
+        .options = .{
             .suffix = ".htm",
         },
     };
@@ -182,7 +182,7 @@ test "DirLoader with json 2" {
     env.withLoader(dl.loader());
 
     {
-        const text = 
+        const text =
             \\{"name": "test name"}
         ;
         const parsed = try std.json.parseFromSlice(std.json.Value, a, text, .{});
@@ -192,7 +192,6 @@ test "DirLoader with json 2" {
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
-
 }
 
 test "DirLoader create" {
@@ -205,9 +204,10 @@ test "DirLoader create" {
     const a = arena.allocator();
 
     const dl: *vin.DirLoader = try .create(
-        a, io, 
-        try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}), 
-        .{ 
+        a,
+        io,
+        try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}),
+        .{
             .suffix = ".htm",
         },
     );
@@ -222,7 +222,6 @@ test "DirLoader create" {
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name10,20,]", out);
     }
-
 }
 
 test "MapLoader renderTemplateAlloc 2" {
@@ -234,7 +233,7 @@ test "MapLoader renderTemplateAlloc 2" {
     const a = arena.allocator();
 
     var map: *vin.MapLoader = try .create(a, &.{
-        .{ .name = "base1",  .source = @embedFile("testdata/views/base1.htm") },
+        .{ .name = "base1", .source = @embedFile("testdata/views/base1.htm") },
         .{ .name = "sub/show5", .source = @embedFile("testdata/views/sub/show5.htm") },
     });
 
@@ -260,9 +259,10 @@ test "DirLoader create with Value create" {
     const a = arena.allocator();
 
     const dl: *vin.DirLoader = try .create(
-        a, io, 
-        try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}), 
-        .{ 
+        a,
+        io,
+        try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}),
+        .{
             .suffix = ".htm",
         },
     );
@@ -271,8 +271,8 @@ test "DirLoader create with Value create" {
     defer env.deinit();
 
     {
-        const ctx = try vin.valueFrom(a, .{ 
-            .name = try vin.Value.create(a, .fromString("test name")), 
+        const ctx = try vin.valueFrom(a, .{
+            .name = try vin.Value.create(a, .fromString("test name")),
             .vlans = [_]u16{ 10, 20 },
         });
 
@@ -280,7 +280,6 @@ test "DirLoader create with Value create" {
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name10,20,]", out);
     }
-
 }
 
 fn greet_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Value {
@@ -297,7 +296,7 @@ fn greet2_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Valu
     const s = ctx.toStr(name_val) catch return error.BadArgument;
     const t = ctx.toStr(tul_val) catch return error.BadArgument;
 
-    const out = try ctx.arena.print("fn2: {s},{s}", .{s, t});
+    const out = try ctx.arena.print("fn2: {s},{s}", .{ s, t });
     return .{ .string = .{ .bytes = out, .safe = false } };
 }
 
@@ -308,7 +307,7 @@ fn greet3_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Valu
     const s = ctx.toStr(name_val) catch return error.BadArgument;
     const t = ctx.toStr(tul_val) catch return error.BadArgument;
 
-    const out = try ctx.arena.print("fn2: {s},{s}", .{s, t});
+    const out = try ctx.arena.print("fn2: {s},{s}", .{ s, t });
     return .{ .string = .{ .bytes = out, .safe = false } };
 }
 
@@ -410,7 +409,7 @@ fn greet_io_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Va
     const ts = std.Io.Timestamp.now(io, .real).toSeconds();
     const ts2 = @divTrunc(ts, 100000000);
 
-    const out = try ctx.arena.print("fn2: {s},{s},{d}", .{s, t, ts2});
+    const out = try ctx.arena.print("fn2: {s},{s},{d}", .{ s, t, ts2 });
     return .{ .string = .{ .bytes = out, .safe = false } };
 }
 
@@ -441,7 +440,7 @@ fn addString_fn(ctx: *vin.FilterCtx, input: value.Value, args: vin.FilterArgs) f
 
     const in = ctx.toStr(input) catch return error.BadArgument;
 
-    const out = try ctx.arena.print("addstr: {s},{s}", .{n, in});
+    const out = try ctx.arena.print("addstr: {s},{s}", .{ n, in });
     return .{ .string = .{ .bytes = out, .safe = false } };
 }
 
@@ -696,32 +695,41 @@ test "Value is and to" {
     {
         const v = vin.Value.fromBool(true);
         try testing.expectEqual(true, v.isBool());
+        try testing.expectEqual(false, v.isNumber());
         try testing.expectEqual(true, v.toBool().?);
     }
     {
         const v = vin.Value.fromInt(6);
         try testing.expectEqual(true, v.isInt());
+        try testing.expectEqual(true, v.isNumber());
+        try testing.expectEqual(true, v.isTrue());
         try testing.expectEqual(false, v.isBool());
         try testing.expectEqual(6, v.toInt().?);
     }
     {
         const v = vin.Value.fromFloat(7.6);
         try testing.expectEqual(true, v.isFloat());
+        try testing.expectEqual(true, v.isNumber());
+        try testing.expectEqual(true, v.isTrue());
+        try testing.expectEqual(0, v.len());
         try testing.expectEqual(7.6, v.toFloat().?);
     }
     {
         const v = vin.Value.fromString("test-data");
         try testing.expectEqual(true, v.isString());
+        try testing.expectEqual(true, v.isTrue());
         try testing.expectEqual("test-data", v.toString().?.bytes);
     }
     {
         const v = vin.Value.fromString("test-data");
         try testing.expectEqual(true, v.isString());
+        try testing.expectEqual(9, v.len());
         try testing.expectEqual("test-data", v.toStrings().?);
     }
     {
         const v = vin.Value.fromMarkup("test-data2");
         try testing.expectEqual(true, v.isString());
+        try testing.expectEqual(true, v.isTrue());
         try testing.expectEqual("test-data2", v.toString().?.bytes);
     }
     {
@@ -731,6 +739,8 @@ test "Value is and to" {
         };
         const v = vin.Value.fromList(list);
         try testing.expectEqual(true, v.isArray());
+        try testing.expectEqual(true, v.isTrue());
+        try testing.expectEqual(2, v.len());
         try testing.expectEqual(list, v.toArray().?);
     }
     {
@@ -740,18 +750,23 @@ test "Value is and to" {
         };
         const v = vin.Value.fromTuple(list);
         try testing.expectEqual(true, v.isArray());
+        try testing.expectEqual(true, v.isTrue());
         try testing.expectEqual(list, v.toArray().?);
     }
     {
         const m: vin.Map = .empty;
         const v = vin.Value.fromMap(m);
         try testing.expectEqual(true, v.isMap());
+        try testing.expectEqual(false, v.isTrue());
+        try testing.expectEqual(0, v.len());
         try testing.expectEqual(m.pairs, v.toMap(alloc).?);
     }
     {
         var m: vin.Namespace = .empty;
         const v = vin.Value.fromNamespace(&m);
         try testing.expectEqual(true, v.isMap());
+        try testing.expectEqual(true, v.isTrue());
+        try testing.expectEqual(0, v.len());
         try testing.expectEqual(m.pairs.toOwnedSlice(alloc) catch &.{}, v.toMap(alloc).?);
     }
     {
@@ -763,6 +778,7 @@ test "Value is and to" {
         };
         const v = vin.Value.fromLoop(&m);
         try testing.expectEqual(true, v.isLoop());
+        try testing.expectEqual(true, v.isTrue());
         try testing.expectEqual(m.items, v.toLoop().?.items);
     }
     {
@@ -774,15 +790,21 @@ test "Value is and to" {
         };
         const v: vin.Value = .fromMacro(m);
         try testing.expectEqual(true, v.isMacro());
+        try testing.expectEqual(true, v.isTrue());
         try testing.expectEqual(m, v.toMacro().?);
     }
     {
         const v: vin.Value = .{ .undef = .{ .name = "test" } };
         try testing.expectEqual(true, v.isUndefined());
+        try testing.expectEqual(true, v.isNil());
+        try testing.expectEqual(false, v.isTrue());
     }
     {
         const v: vin.Value = .none;
         try testing.expectEqual(true, v.isNone());
+        try testing.expectEqual(true, v.isNil());
+        try testing.expectEqual(false, v.isTrue());
+        try testing.expectEqual(0, v.len());
     }
 }
 
@@ -854,9 +876,10 @@ test "MultiLoader" {
     try map.put("sub/show1", @embedFile("testdata/views/sub2/show1.htm"));
 
     const dl: *vin.DirLoader = try .create(
-        a, io, 
-        try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}), 
-        .{ 
+        a,
+        io,
+        try std.Io.Dir.cwd().openDir(io, "src/testdata/views", .{}),
+        .{
             .suffix = ".htm",
         },
     );

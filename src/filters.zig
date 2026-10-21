@@ -1342,13 +1342,13 @@ fn fFilesizeformat(ctx: *Ctx, input: Value, args: Args) Error!Value {
     if (unit_idx == 0) {
         if (bytes == 1) {
             const unit = "byte";
-            result = try arena.print("{d}{s}{s}", .{bytes, nbsp, unit});
+            result = try arena.print("{d}{s}{s}", .{ bytes, nbsp, unit });
         } else {
             const unit = "bytes";
-            result = try arena.print("{d}{s}{s}", .{bytes, nbsp, unit});
+            result = try arena.print("{d}{s}{s}", .{ bytes, nbsp, unit });
         }
     } else {
-        result = try arena.print("{:.1}{s}{s}", .{size, nbsp, units[unit_idx]});
+        result = try arena.print("{:.1}{s}{s}", .{ size, nbsp, units[unit_idx] });
     }
 
     if (negative) {

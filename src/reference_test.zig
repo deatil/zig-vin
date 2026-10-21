@@ -94,4 +94,3 @@ test "replay: every recorded case carries the inputs it was rendered from" {
     }
     try testing.expectEqual(expecting_error, refused);
 }
-

@@ -227,6 +227,10 @@ pub const Value = union(enum) {
         return self == .none;
     }
 
+    pub fn isNil(self: Value) bool {
+        return self.isUndefined() or self.isNone();
+    }
+
     pub fn isBool(self: Value) bool {
         return self == .boolean;
     }
@@ -237,6 +241,14 @@ pub const Value = union(enum) {
 
     pub fn isFloat(self: Value) bool {
         return self == .float;
+    }
+
+    pub fn isNumber(self: Value) bool {
+        return self.isInt() or self.isFloat();
+    }
+
+    pub fn isTrue(self: Value) bool {
+        return self.truthy();
     }
 
     pub fn isString(self: Value) bool {
@@ -356,6 +368,17 @@ pub const Value = union(enum) {
         }
 
         return null;
+    }
+
+    pub fn len(self: Value) usize {
+        return switch (self) {
+            .string => |s| s.bytes.len,
+            .list, .tuple => |l| l.len,
+            .map => |m| m.pairs.len,
+            .namespace => |n| n.pairs.items.len,
+            .loop => |l| l.items.len,
+            else => 0,
+        };
     }
 
     /// Python truthiness: 0, 0.0, "", [], {}, None, False are falsey.

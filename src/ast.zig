@@ -179,7 +179,7 @@ pub const CallBlock = struct {
     line: usize,
 };
 
-pub const Error = error{ TemplateSyntaxError };
+pub const Error = error{TemplateSyntaxError};
 
 pub const Generic = struct {
     ctx: *const anyopaque,
