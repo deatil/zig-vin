@@ -42,6 +42,10 @@ pub const Error = value.Error || error{
     BadCall,
     /// The loader itself failed (I/O, size cap, a name it refuses).
     LoaderFailed,
+    /// A loop body executed `{% continue %}`.
+    LoopContinue,
+    /// A loop body executed `{% break %}`.
+    LoopBreak,
 };
 
 pub const UndefinedPolicy = enum {
@@ -199,6 +203,8 @@ pub const Renderer = struct {
     caller: ?Value = null,
     /// The loop a `{% for … recursive %}` body may re-enter via `loop()`.
     recursive: ?RecursiveLoop = null,
+    /// How many loop scopes are currently active for break/continue.
+    loop_depth: usize = 0,
     /// Per-render template cache: a name is loaded and compiled at most once.
     cache: std.StringHashMapUnmanaged(*Unit) = .empty,
     template_depth: usize = 0,
@@ -294,6 +300,20 @@ pub const Renderer = struct {
                 if (try self.truthy(b.cond, 0)) try self.renderNodes(b.body) else try self.renderNodes(b.orelse_);
             },
             .for_ => |f| try self.renderFor(f),
+            .continue_ => |c| {
+                if (self.loop_depth == 0) {
+                    return self.fail(c.line, "continue outside of a loop", .{}, error.TemplateSyntaxError);
+                }
+
+                return error.LoopContinue;
+            },
+            .break_ => |c| {
+                if (self.loop_depth == 0) {
+                    return self.fail(c.line, "break outside of a loop", .{}, error.TemplateSyntaxError);
+                }
+
+                return error.LoopBreak;
+            },
             .set => |s| {
                 const v = try self.eval(s.expr, 0);
                 try self.assign(s.target, v, 0);
@@ -838,10 +858,18 @@ pub const Renderer = struct {
         defer self.recursive = saved_recursive;
         self.recursive = if (f.recursive) .{ .def = f, .depth = depth } else null;
 
+        const saved_loop_depth = self.loop_depth;
+        self.loop_depth += 1;
+        defer self.loop_depth = saved_loop_depth;
+
         for (items, 0..) |item, i| {
             loop.index0 = i;
             try self.bindTarget(f.target, item);
-            try self.renderNodes(f.body);
+            self.renderNodes(f.body) catch |err| switch (err) {
+                error.LoopContinue => continue,
+                error.LoopBreak => break,
+                else => return err,
+            };
         }
     }
 

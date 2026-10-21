@@ -952,3 +952,59 @@ test "MultiLoader" {
         try testing.expectError(error.LoaderInvalid, out);
     }
 }
+
+test "for loop with continue and break" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile("{% for i in [1, 2, 3, 4, 5] %}{% if i == 2 %}{% continue %}{% endif %}{% if i == 4 %}{% break %}{% endif %}{{ i }}{% endfor %}", null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("13", out);
+}
+
+test "for loop with continue and break fail" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    {
+        var tpl = try env.compile("{% continue %}{% for i in [1, 2, 3, 4, 5] %}{% if i == 2 %}{% continue %}{% endif %}{% if i == 4 %}{% break %}{% endif %}{{ i }}{% endfor %}", null);
+        defer tpl.deinit();
+
+        var diag: vin.Diagnostic = undefined;
+
+        const ctx = try vin.valueFrom(alloc, .{});
+        const out = tpl.render(alloc, ctx, &diag);
+
+        try testing.expectError(error.TemplateSyntaxError, out);
+
+        const msg = try alloc.print("{f}", .{diag});
+        try testing.expectEqualStrings("line 1: continue outside of a loop", msg);
+    }
+
+    {
+        var tpl = try env.compile("{% break %}{% for i in [1, 2, 3, 4, 5] %}{% if i == 2 %}{% continue %}{% endif %}{% if i == 4 %}{% break %}{% endif %}{{ i }}{% endfor %}", null);
+        defer tpl.deinit();
+
+        var diag: vin.Diagnostic = undefined;
+
+        const ctx = try vin.valueFrom(alloc, .{});
+        const out = tpl.render(alloc, ctx, &diag);
+
+        try testing.expectError(error.TemplateSyntaxError, out);
+
+        const msg = try alloc.print("{f}", .{diag});
+        try testing.expectEqualStrings("line 1: break outside of a loop", msg);
+    }
+}

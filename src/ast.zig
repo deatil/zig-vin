@@ -83,6 +83,14 @@ pub const For = struct {
     recursive: bool,
 };
 
+pub const Continue = struct {
+    line: usize,
+};
+
+pub const Break = struct {
+    line: usize,
+};
+
 pub const Set = struct {
     target: Target,
     expr: *const Expr,
@@ -192,6 +200,8 @@ pub const Node = union(enum) {
     output: struct { expr: *const Expr, line: usize },
     if_: If,
     for_: For,
+    continue_: Continue,
+    break_: Break,
     set: Set,
     set_block: SetBlock,
     filter_block: FilterBlock,

@@ -189,6 +189,8 @@ pub const Parser = struct {
 
         if (std.mem.eql(u8, kw.text, "if")) return self.parseIf(rest, line, out);
         if (std.mem.eql(u8, kw.text, "for")) return self.parseFor(rest, line, out);
+        if (std.mem.eql(u8, kw.text, "continue")) return self.parseContinue(rest, line, out);
+        if (std.mem.eql(u8, kw.text, "break")) return self.parseBreak(rest, line, out);
         if (std.mem.eql(u8, kw.text, "set")) return self.parseSet(rest, line, out);
         if (std.mem.eql(u8, kw.text, "filter")) return self.parseFilterBlock(rest, line, out);
         if (std.mem.eql(u8, kw.text, "with")) return self.parseWith(rest, line, out);
@@ -199,6 +201,7 @@ pub const Parser = struct {
         if (std.mem.eql(u8, kw.text, "from")) return self.parseFromImport(rest, line, out);
         if (std.mem.eql(u8, kw.text, "macro")) return self.parseMacro(rest, line, out);
         if (std.mem.eql(u8, kw.text, "call")) return self.parseCallBlock(rest, line, out);
+
         if (std.mem.eql(u8, kw.text, "do")) {
             var ts: Stream = .{ .toks = rest, .p = self };
             const e = try ts.parseExpression(line, true);
@@ -268,6 +271,18 @@ pub const Parser = struct {
             .empty = empty,
             .recursive = recursive,
         } });
+    }
+
+    fn parseContinue(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+        var ts: Stream = .{ .toks = rest, .p = self };
+        try ts.expectEnd(line);
+        try out.append(self.arena, .{ .continue_ = .{ .line = line } });
+    }
+
+    fn parseBreak(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+        var ts: Stream = .{ .toks = rest, .p = self };
+        try ts.expectEnd(line);
+        try out.append(self.arena, .{ .break_ = .{ .line = line } });
     }
 
     fn parseSet(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
@@ -537,6 +552,8 @@ pub fn nodeMentions(n: Node, name: []const u8) bool {
         .for_ => |f| exprMentions(f.iterable, name) or
             (f.cond != null and exprMentions(f.cond.?, name)) or
             mentionsName(f.body, name) or mentionsName(f.empty, name),
+        .continue_ => false,
+        .break_ => false,
         .set => |st| exprMentions(st.expr, name),
         .set_block => |sb| mentionsName(sb.body, name) or (sb.filter != null and exprMentions(sb.filter.?, name)),
         .filter_block => |fb| exprMentions(fb.filter, name) or mentionsName(fb.body, name),
