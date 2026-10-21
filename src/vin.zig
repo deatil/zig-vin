@@ -1,6 +1,7 @@
 const std = @import("std");
 const Io = std.Io;
 const Writer = std.Io.Writer;
+const Alignment = std.mem.Alignment;
 const Allocator = std.mem.Allocator;
 
 pub const lexer = @import("lexer.zig");
@@ -451,25 +452,25 @@ const RenderBudget = struct {
         return true;
     }
 
-    fn alloc(ctx: *anyopaque, len: usize, a: std.mem.Alignment, ra: usize) ?[*]u8 {
+    fn alloc(ctx: *anyopaque, len: usize, a: Alignment, ra: usize) ?[*]u8 {
         const self: *RenderBudget = @ptrCast(@alignCast(ctx));
         if (!self.take(len)) return null;
         return self.parent.rawAlloc(len, a, ra);
     }
 
-    fn resize(ctx: *anyopaque, memory: []u8, a: std.mem.Alignment, new_len: usize, ra: usize) bool {
+    fn resize(ctx: *anyopaque, memory: []u8, a: Alignment, new_len: usize, ra: usize) bool {
         const self: *RenderBudget = @ptrCast(@alignCast(ctx));
         if (new_len > memory.len and !self.take(new_len - memory.len)) return false;
         return self.parent.rawResize(memory, a, new_len, ra);
     }
 
-    fn remap(ctx: *anyopaque, memory: []u8, a: std.mem.Alignment, new_len: usize, ra: usize) ?[*]u8 {
+    fn remap(ctx: *anyopaque, memory: []u8, a: Alignment, new_len: usize, ra: usize) ?[*]u8 {
         const self: *RenderBudget = @ptrCast(@alignCast(ctx));
         if (new_len > memory.len and !self.take(new_len - memory.len)) return null;
         return self.parent.rawRemap(memory, a, new_len, ra);
     }
 
-    fn free(ctx: *anyopaque, memory: []u8, a: std.mem.Alignment, ra: usize) void {
+    fn free(ctx: *anyopaque, memory: []u8, a: Alignment, ra: usize) void {
         const self: *RenderBudget = @ptrCast(@alignCast(ctx));
         self.parent.rawFree(memory, a, ra);
     }

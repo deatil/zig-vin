@@ -39,7 +39,7 @@ test "an unknown filter is a COMPILE error, never a render-time surprise" {
     defer env.deinit();
     var diag: vin.Diagnostic = .{};
     try testing.expectError(error.TemplateSyntaxError, env.compile("{{ x|nosuchfilter }}", &diag));
-    try testing.expect(std.mem.indexOf(u8, diag.message(), "unknown filter") != null);
+    try testing.expect(std.mem.find(u8, diag.message(), "unknown filter") != null);
 }
 
 test "an unknown test is a compile error too" {
@@ -59,7 +59,7 @@ test "the tags that remain unimplemented are named as such, not as typos" {
     }) |src| {
         var diag: vin.Diagnostic = .{};
         try testing.expectError(error.TemplateSyntaxError, env.compile(src, &diag));
-        try testing.expect(std.mem.indexOf(u8, diag.message(), "unknown tag") != null);
+        try testing.expect(std.mem.find(u8, diag.message(), "unknown tag") != null);
     }
 }
 
@@ -75,7 +75,7 @@ test "a composition tag without a loader is a named error, not a silent nothing"
         var diag: vin.Diagnostic = .{};
         const r = env.renderAlloc(src, .{ .map = .{ .pairs = &.{} } }, &diag);
         try testing.expectError(error.NoLoader, r);
-        try testing.expect(std.mem.indexOf(u8, diag.message(), "no loader") != null);
+        try testing.expect(std.mem.find(u8, diag.message(), "no loader") != null);
     }
 }
 
@@ -96,7 +96,7 @@ test "a render-time diagnostic names the undefined variable" {
     defer tmpl.deinit();
     var diag: vin.Diagnostic = .{};
     try testing.expectError(error.UndefinedValue, tmpl.render(gpa, .{ .map = .{ .pairs = &.{} } }, &diag));
-    try testing.expect(std.mem.indexOf(u8, diag.message(), "missing") != null);
+    try testing.expect(std.mem.find(u8, diag.message(), "missing") != null);
 }
 
 test "strict is the default undefined policy" {
@@ -290,8 +290,8 @@ test "an unknown filter inside a LOADED template is still a resolution error" {
         error.TemplateSyntaxError,
         env.renderAlloc("{% include 'bad' %}", .{ .map = .{ .pairs = &.{} } }, &diag),
     );
-    try testing.expect(std.mem.indexOf(u8, diag.message(), "bad") != null);
-    try testing.expect(std.mem.indexOf(u8, diag.message(), "unknown filter") != null);
+    try testing.expect(std.mem.find(u8, diag.message(), "bad") != null);
+    try testing.expect(std.mem.find(u8, diag.message(), "unknown filter") != null);
 }
 
 test "a Template stays immutable across renders that load other templates" {
@@ -340,11 +340,11 @@ test "autoescape: context data cannot reach the output unescaped without |safe" 
     }) |c| {
         const out = try renderWith(gpa, .{ .autoescape = true }, c.src, ctx);
         defer gpa.free(out);
-        if (std.mem.indexOfScalar(u8, out, '<') != null) {
+        if (std.mem.findScalar(u8, out, '<') != null) {
             std.debug.print("\nautoescape bypass: '{s}' rendered '{s}'\n", .{ c.src, out });
             return error.AutoescapeBypass;
         }
-        if (std.mem.indexOf(u8, out, c.escaped) == null) {
+        if (std.mem.find(u8, out, c.escaped) == null) {
             std.debug.print("\n'{s}' rendered '{s}', which does not carry '{s}'\n", .{ c.src, out, c.escaped });
             return error.EscapedFormMissing;
         }
@@ -420,7 +420,7 @@ test "nesting deeper than the bound is a named error, not a stack overflow" {
         } else |e| try testing.expectEqual(error.TooDeep, e);
         // Reported like every other template error: a typed error plus a
         // diagnostic, not a panic and not a silent truncation.
-        try testing.expect(std.mem.indexOf(u8, diag.message(), "nested deeper than") != null);
+        try testing.expect(std.mem.find(u8, diag.message(), "nested deeper than") != null);
     }
 }
 

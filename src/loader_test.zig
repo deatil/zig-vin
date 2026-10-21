@@ -117,7 +117,7 @@ test "a template cannot escape the root through a name taken from the context" {
         error.LoaderFailed,
         env.renderAlloc("{% include theme %}", ctx, &diag),
     );
-    try testing.expect(std.mem.indexOf(u8, diag.message(), "refused") != null);
+    try testing.expect(std.mem.find(u8, diag.message(), "refused") != null);
 
     var diag2: vin.Diagnostic = .{};
     try testing.expectError(
@@ -297,7 +297,7 @@ test "the caps are configurable and the error names the limit" {
         error.TooDeep,
         env.renderAlloc("{% include 'a' %}", .{ .map = .{ .pairs = &.{} } }, &diag),
     );
-    try testing.expect(std.mem.indexOf(u8, diag.message(), "4") != null);
+    try testing.expect(std.mem.find(u8, diag.message(), "4") != null);
 }
 
 test "a legitimate deep chain still renders — the cap is not just 'no nesting'" {
