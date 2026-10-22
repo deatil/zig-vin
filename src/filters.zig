@@ -68,7 +68,7 @@ pub fn intFromFloatChecked(f: f64) Error!i64 {
     return @intFromFloat(t);
 }
 
-fn intArg(v: Value, dflt: i64) Error!i64 {
+pub fn intArg(v: Value, dflt: i64) Error!i64 {
     return switch (v) {
         .integer => |i| i,
         .boolean => |b| @intFromBool(b),
@@ -79,12 +79,12 @@ fn intArg(v: Value, dflt: i64) Error!i64 {
     };
 }
 
-fn boolArg(args: Args, i: usize, name: []const u8, dflt: bool) bool {
+pub fn boolArg(args: Args, i: usize, name: []const u8, dflt: bool) bool {
     const v = args.get(i, name) orelse return dflt;
     return v.truthy();
 }
 
-fn strArg(ctx: *Ctx, args: Args, i: usize, name: []const u8, dflt: []const u8) Error![]const u8 {
+pub fn strArg(ctx: *Ctx, args: Args, i: usize, name: []const u8, dflt: []const u8) Error![]const u8 {
     const v = args.get(i, name) orelse return dflt;
     return ctx.toStr(v);
 }
@@ -93,17 +93,17 @@ fn strArg(ctx: *Ctx, args: Args, i: usize, name: []const u8, dflt: []const u8) E
 /// own bytes** — a case fold, a trim, a reversal, a prefix removal. markupsafe
 /// does exactly this (`Markup.upper()`, `Markup.strip()`, `Markup.removeprefix()`
 /// all return `Markup` without escaping anything).
-fn markupAware(ctx: *Ctx, input: Value, bytes: []const u8) Value {
+pub fn markupAware(ctx: *Ctx, input: Value, bytes: []const u8) Value {
     const safe = ctx.autoescape and input == .string and input.string.safe;
     return .{ .string = .{ .bytes = bytes, .safe = safe } };
 }
 
-fn isMarkup(v: Value) bool {
+pub fn isMarkup(v: Value) bool {
     return v == .string and v.string.safe;
 }
 
 /// The elements a sequence filter works on.
-fn seq(ctx: *Ctx, v: Value) Error![]const Value {
+pub fn seq(ctx: *Ctx, v: Value) Error![]const Value {
     // Matches the reference: its default `Undefined` is an empty iterable, so
     // `missing|list` is `[]`; `StrictUndefined` refuses.
     if (v == .undef) return if (ctx.strict) error.UndefinedValue else &.{};
@@ -112,7 +112,7 @@ fn seq(ctx: *Ctx, v: Value) Error![]const Value {
 
 /// `attribute=` support, shared by sort/min/max/sum/unique/map/groupby-likes.
 /// A dotted path (`a.b`) and an integer index both work, as in the reference.
-fn attrOf(ctx: *Ctx, item: Value, spec: Value) Error!Value {
+pub fn attrOf(ctx: *Ctx, item: Value, spec: Value) Error!Value {
     switch (spec) {
         .integer => |i| {
             const items = value.iterate(ctx.arena, item) catch return .{ .undef = .{ .name = "index" } };
@@ -165,11 +165,23 @@ fn fCapitalize(ctx: *Ctx, input: Value, args: Args) Error!Value {
     return markupAware(ctx, input, out);
 }
 
-fn isTitleBoundary(c: u8) bool {
+pub fn isTitleBoundary(c: u8) bool {
     return switch (c) {
         '-', ' ', '\t', '\r', '\n', 0x0b, 0x0c, '(', '{', '[', '<' => true,
         else => false,
     };
+}
+
+pub fn titleMethod(ctx: *Ctx, input: Value) Error!Value {
+    const s = try ctx.toStr(input);
+    const out = try ctx.arena.dupe(u8, s);
+    var at_start = true;
+    for (out) |*c| {
+        const alpha = std.ascii.isAlphabetic(c.*);
+        c.* = if (at_start) std.ascii.toUpper(c.*) else std.ascii.toLower(c.*);
+        at_start = !alpha;
+    }
+    return markupAware(ctx, input, out);
 }
 
 fn fTitle(ctx: *Ctx, input: Value, args: Args) Error!Value {
@@ -184,18 +196,6 @@ fn fTitle(ctx: *Ctx, input: Value, args: Args) Error!Value {
         prev_boundary = boundary;
     }
     return Value.fromString(out);
-}
-
-fn titleMethod(ctx: *Ctx, input: Value) Error!Value {
-    const s = try ctx.toStr(input);
-    const out = try ctx.arena.dupe(u8, s);
-    var at_start = true;
-    for (out) |*c| {
-        const alpha = std.ascii.isAlphabetic(c.*);
-        c.* = if (at_start) std.ascii.toUpper(c.*) else std.ascii.toLower(c.*);
-        at_start = !alpha;
-    }
-    return markupAware(ctx, input, out);
 }
 
 fn fTrim(ctx: *Ctx, input: Value, args: Args) Error!Value {
@@ -1225,7 +1225,7 @@ fn jsonWrite(ctx: *Ctx, w: *Writer, v: Value, indent: ?usize, depth: usize) Erro
             if (pairs.len != 0 and indent != null) try jsonSep(w, indent, depth, true);
             w.writeAll("}") catch return error.OutOfMemory;
         },
-        .loop, .macro, .callable => return error.BadArgument,
+        .loop, .macro, .callable, .caller => return error.BadArgument,
     }
 }
 

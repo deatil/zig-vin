@@ -24,6 +24,7 @@ pub const Pair = value.Pair;
 pub const Map = value.Map;
 pub const Namespace = value.Namespace;
 pub const Callable = value.Callable;
+pub const Caller = value.Caller;
 pub const Undefined = value.Undefined;
 
 // first code from https://github.com/zaxified/zig-libs
@@ -104,6 +105,8 @@ pub const GlobalFn = filters.GlobalFn;
 pub const MethodFn = filters.MethodFn;
 pub const TagFn = parser.TagFn;
 
+const defaults = @import("defaults.zig");
+
 /// Owns the filter and test registries and the syntax options. Compiling a
 /// template resolves every filter and test name against this environment, so
 /// an environment must outlive the templates compiled from it.
@@ -141,6 +144,9 @@ pub const Environment = struct {
         }
         for (filters.builtin_tests) |e| {
             try env.tests.put(gpa, e.name, e.func);
+        }
+        for (defaults.builtin_globals) |e| {
+            try env.globals.put(gpa, e.name, e.func);
         }
 
         return env;

@@ -101,7 +101,10 @@ pub fn renderCase(gpa: Allocator, io: Io, c: Case) !Outcome {
     defer env.deinit();
 
     var diag: vin.Diagnostic = .{};
-    var tmpl = env.compile(c.template, &diag) catch return .{ .failed = "compile error" };
+    var tmpl = env.compile(c.template, &diag) catch {
+        const msg = try gpa.print("compile error: {f}", .{diag});
+        return .{ .failed = msg };
+    };
     defer tmpl.deinit();
     const out = tmpl.render(gpa, ctx, &diag) catch return .{ .failed = "render error" };
     return .{ .ok = out };

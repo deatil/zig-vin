@@ -23,6 +23,7 @@ pub const Error = value.Error || error{
     RenderBudgetExceeded,
     /// Called something that is not callable, or a method a value does not have.
     NotCallable,
+    NotCaller,
     /// A filter/test named at compile time vanished from the registry.
     UnknownFilter,
     /// A composition tag named a template the loader does not have.
@@ -1144,6 +1145,13 @@ pub const Renderer = struct {
 
             const bound = self.resolve(name);
             if (bound == .macro) return self.callMacro(bound.macro, args, c.line);
+            if (bound == .caller) {
+                const caller = bound.caller;
+                var ctx = self.filterCtx();
+                return caller.call(caller.ctx, &ctx, args) catch |err| {
+                    return self.fail(c.line, "'{s}' function call fail", .{name}, err);
+                };
+            }
 
             if (std.mem.eql(u8, name, "loop")) return self.recurseLoop(args, c.line);
             if (std.mem.eql(u8, name, "range")) return self.globalRange(args, c.line);
@@ -1151,13 +1159,6 @@ pub const Renderer = struct {
                 return self.fail(c.line, "'{s}' call fail", .{name}, err);
             };
             if (std.mem.eql(u8, name, "namespace")) return self.globalNamespace(args) catch |err| {
-                return self.fail(c.line, "'{s}' call fail", .{name}, err);
-            };
-
-            if (std.mem.eql(u8, name, "cycler")) return self.globalCycler(args) catch |err| {
-                return self.fail(c.line, "'{s}' call fail", .{name}, err);
-            };
-            if (std.mem.eql(u8, name, "joiner")) return self.globalJoiner(args) catch |err| {
                 return self.fail(c.line, "'{s}' call fail", .{name}, err);
             };
 
@@ -1235,53 +1236,6 @@ pub const Renderer = struct {
         }
         for (args.kw) |k| try ns.set(self.arena, k.name, k.value);
         return .{ .namespace = ns };
-    }
-
-    pub fn globalCycler(self: *Renderer, args: filters.Args) Error!Value {
-        _ = self;
-
-        // New form: cycler(data, index)
-        const data_v = args.get(0, "data") orelse return error.BadArgument;
-        const idx_v = args.get(1, "index") orelse return error.BadArgument;
-
-        // index must be integer
-        if (idx_v != .integer) return error.BadArgument;
-        if (idx_v.integer < 0) return error.BadArgument;
-        const idx: usize = @intCast(idx_v.integer);
-
-        var items: []const Value = &.{};
-
-        // input must be a sequence (list or tuple)
-        switch (data_v) {
-            .list => |l| items = l,
-            .tuple => |t| items = t,
-            else => return error.BadArgument,
-        }
-
-        const n: usize = items.len;
-        if (n == 0) return .empty_string;
-
-        if (n > 1) {
-            return items[idx % n];
-        }
-
-        return items[0];
-    }
-
-    pub fn globalJoiner(self: *Renderer, args: filters.Args) Error!Value {
-        _ = self;
-
-        // New form: joiner(input, index)
-        const sep_v = args.get(0, "sep") orelse Value.empty_string;
-        const idx_v = args.get(1, "index") orelse return error.BadArgument;
-
-        // index must be integer
-        if (idx_v != .integer) return error.BadArgument;
-        if (idx_v.integer < 0) return error.BadArgument;
-        const idx: usize = @intCast(idx_v.integer);
-
-        if (idx == 0) return .empty_string;
-        return sep_v;
     }
 
     // ── attribute / item / method access ────────────────────────────────────

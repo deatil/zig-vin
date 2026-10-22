@@ -297,6 +297,7 @@ pub const Parser = struct {
                 return;
             }
         }
+
         // Block form: `{% set x %}…{% endset %}`, optionally filtered.
         var filter: ?*const Expr = null;
         if (ts.peek() != null and ts.peek().?.kind == .pipe) {

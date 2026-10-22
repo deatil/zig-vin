@@ -1070,3 +1070,73 @@ test "env bans" {
         try testing.expectEqual(false, env.tags.contains("test_tags"));
     }
 }
+
+const TestCaller = struct {
+    pub fn test_fn(ctx: *anyopaque, fctx: *vin.FilterCtx, args: vin.FilterArgs) vin.FilterError!vin.Value {
+        _ = ctx;
+        _ = fctx;
+
+        const name_val = args.get(0, "name") orelse return error.BadArgument;
+        const n = name_val.toStrings() orelse "";
+        return .fromString(n);
+    }
+};
+
+test "value caller" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile("<>{{ data('test-data') }}", null);
+    defer tpl.deinit();
+
+    var ba: TestCaller = .{};
+    const val: vin.Value = .fromCaller(.{
+        .ctx = &ba,
+        .call = TestCaller.test_fn,
+    });
+
+    try testing.expectEqual(true, val.isCaller());
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .data = val,
+    });
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("<>test-data", out);
+}
+
+test "value caller fail" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile("<>{{ data() }}", null);
+    defer tpl.deinit();
+
+    var ba: TestCaller = .{};
+    const val: vin.Value = .fromCaller(.{
+        .ctx = &ba,
+        .call = TestCaller.test_fn,
+    });
+
+    try testing.expectEqual(true, val.isCaller());
+
+    var diag: vin.Diagnostic = undefined;
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .data = val,
+    });
+    const out = tpl.render(alloc, ctx, &diag);
+
+    try testing.expectError(error.BadArgument, out);
+
+    const msg = try alloc.print("{f}", .{diag});
+    try testing.expectEqualStrings("line 1: 'data' function call fail", msg);
+}
