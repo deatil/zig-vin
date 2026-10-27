@@ -2,7 +2,7 @@ const std = @import("std");
 const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
 
-const filters = @import("filters.zig");
+const args = @import("args.zig");
 
 pub const Error = error{
     OutOfMemory,
@@ -20,6 +20,9 @@ pub const Error = error{
     // for callable
     InvalidMethod,
     InvalidExec,
+    // for return diag message
+    DiagInvalidTemplateSyntax,
+    DiagBadArgument,
 };
 
 /// A string plus the one bit markupsafe carries: whether it is already markup
@@ -121,16 +124,21 @@ pub const Loop = struct {
     last_changed: ?[]const Value = null,
 };
 
-// For value method
+// For value call
 pub const Callable = struct {
     ctx: *anyopaque,
-    call: *const fn (ctx: *anyopaque, fctx: *filters.Ctx, method: []const u8, args: filters.Args) Error!Value,
-};
-
-// For value call
-pub const Caller = struct {
-    ctx: *anyopaque,
-    call: *const fn (ctx: *anyopaque, fctx: *filters.Ctx, args: filters.Args) Error!Value,
+    // For value method
+    callMethod: ?*const fn (ctx: *anyopaque, fctx: *args.Ctx, method: []const u8, args: args.Args) Error!Value = null,
+    // For value call
+    call: ?*const fn (ctx: *anyopaque, fctx: *args.Ctx, args: args.Args) Error!Value = null,
+    // Set attr value
+    setAttr: ?*const fn (ctx: *anyopaque, fctx: *args.Ctx, name: []const u8, val: Value) Error!void = null,
+    // Get attr value
+    getAttr: ?*const fn (ctx: *anyopaque, fctx: *args.Ctx, name: []const u8) Error!Value = null,
+    // Set item value
+    setItem: ?*const fn (ctx: *anyopaque, fctx: *args.Ctx, idx: Value, val: Value) Error!void = null,
+    // Get item value
+    getItem: ?*const fn (ctx: *anyopaque, fctx: *args.Ctx, idx: Value) Error!Value = null,
 };
 
 /// A missing name, or the result of an operation the reference implementation
@@ -170,7 +178,6 @@ pub const Value = union(enum) {
     namespace: *Namespace,
     loop: *Loop,
     callable: Callable,
-    caller: Caller,
     macro: MacroRef,
 
     pub const empty_string: Value = .{ .string = .{ .bytes = "" } };
@@ -228,10 +235,6 @@ pub const Value = union(enum) {
 
     pub fn fromCallable(callable: Callable) Value {
         return .{ .callable = callable };
-    }
-
-    pub fn fromCaller(caller: Caller) Value {
-        return .{ .caller = caller };
     }
 
     pub fn isUndefined(self: Value) bool {
@@ -294,10 +297,6 @@ pub const Value = union(enum) {
 
     pub fn isCallable(self: Value) bool {
         return self == .callable;
-    }
-
-    pub fn isCaller(self: Value) bool {
-        return self == .caller;
     }
 
     pub fn toBool(self: Value) ?bool {
@@ -389,14 +388,6 @@ pub const Value = union(enum) {
         return null;
     }
 
-    pub fn toCaller(self: Value) ?Callable {
-        if (self == .caller) {
-            return self.caller;
-        }
-
-        return null;
-    }
-
     pub fn len(self: Value) usize {
         return switch (self) {
             .string => |s| s.bytes.len,
@@ -425,7 +416,6 @@ pub const Value = union(enum) {
             .loop => |l| l.items.len != 0,
             .macro => true,
             .callable => true,
-            .caller => true,
         };
     }
 
@@ -443,7 +433,6 @@ pub const Value = union(enum) {
             .macro => "macro",
             .map, .namespace, .loop => "dict",
             .callable => "callable",
-            .caller => "caller",
         };
     }
 };
@@ -464,7 +453,6 @@ pub fn from(arena: Allocator, v: anytype) Error!Value {
     if (T == *Namespace) return .{ .namespace = v };
     if (T == *Loop) return .{ .loop = v };
     if (T == Callable) return .{ .callable = v };
-    if (T == Caller) return .{ .caller = v };
 
     return switch (@typeInfo(T)) {
         .null, .void => .none,
@@ -636,7 +624,6 @@ fn reprToDepth(writer: *Writer, v: Value, depth: usize) Error!void {
         .namespace => |ns| try reprPairs(writer, ns.pairs.items, depth + 1),
         .loop => try w(writer, "<loop>"),
         .callable => try w(writer, "<callable>"),
-        .caller => try w(writer, "<caller>"),
         .macro => |m| {
             try w(writer, "<Macro '");
             try w(writer, m.name);

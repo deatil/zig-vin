@@ -5,7 +5,7 @@ const Allocator = std.mem.Allocator;
 
 const ast = @import("ast.zig");
 const value = @import("value.zig");
-const filters = @import("filters.zig");
+const args_mod = @import("args.zig");
 const loader_mod = @import("loader.zig");
 const parser = @import("parser.zig");
 const Diagnostic = @import("diag.zig").Diagnostic;
@@ -23,7 +23,6 @@ pub const Error = value.Error || error{
     RenderBudgetExceeded,
     /// Called something that is not callable, or a method a value does not have.
     NotCallable,
-    NotCaller,
     /// A filter/test named at compile time vanished from the registry.
     UnknownFilter,
     /// A composition tag named a template the loader does not have.
@@ -81,10 +80,10 @@ pub const Options = struct {
 /// this file depending on the environment.
 pub const Lookup = struct {
     ctx: *const anyopaque,
-    filter: *const fn (ctx: *const anyopaque, name: []const u8) ?filters.Fn,
-    test_fn: *const fn (ctx: *const anyopaque, name: []const u8) ?filters.TestFn,
-    global: *const fn (ctx: *const anyopaque, name: []const u8) ?filters.GlobalFn,
-    method: *const fn (ctx: *const anyopaque, name: []const u8) ?filters.MethodFn,
+    filter: *const fn (ctx: *const anyopaque, name: []const u8) ?args_mod.FilterFn,
+    test_fn: *const fn (ctx: *const anyopaque, name: []const u8) ?args_mod.TestFn,
+    global: *const fn (ctx: *const anyopaque, name: []const u8) ?args_mod.GlobalFn,
+    method: *const fn (ctx: *const anyopaque, name: []const u8) ?args_mod.MethodFn,
     /// Where `{% extends %}`/`{% include %}`/`{% import %}` get their bytes.
     /// `null` makes every composition tag `error.NoLoader` — a template that
     /// names another template on an environment with no loader is a mistake
@@ -164,6 +163,7 @@ pub fn render(
         .diag = diag,
         .context = context,
     };
+
     const entry = try arena.create(Unit);
     entry.* = .{ .name = "<string>", .parsed = parsed };
     try r.pushFrame();
@@ -698,7 +698,7 @@ pub const Renderer = struct {
         return .{ .macro = .{ .name = def.name, .impl = impl } };
     }
 
-    pub fn callMacro(self: *Renderer, ref: value.MacroRef, args: filters.Args, line: usize) Error!Value {
+    pub fn callMacro(self: *Renderer, ref: value.MacroRef, args: args_mod.Args, line: usize) Error!Value {
         const impl: *const MacroImpl = @ptrCast(@alignCast(ref.impl));
         const def = impl.def;
 
@@ -752,7 +752,7 @@ pub const Renderer = struct {
         self: *Renderer,
         def: *const ast.MacroDef,
         frame: *Frame,
-        args: filters.Args,
+        args: args_mod.Args,
         name: []const u8,
         line: usize,
     ) Error!void {
@@ -875,7 +875,7 @@ pub const Renderer = struct {
     }
 
     /// `{{ loop(children) }}` inside a `{% for … recursive %}` body.
-    pub fn recurseLoop(self: *Renderer, args: filters.Args, line: usize) Error!Value {
+    pub fn recurseLoop(self: *Renderer, args: args_mod.Args, line: usize) Error!Value {
         const rec = self.recursive orelse
             return self.fail(line, "loop() is only callable inside a `{{% for … recursive %}}` body", .{}, error.NotCallable);
         if (args.pos.len != 1) return self.fail(line, "loop() takes exactly one sequence", .{}, error.BadCall);
@@ -913,6 +913,7 @@ pub const Renderer = struct {
                 for (names, parts) |n, p| try self.define(n, p);
             },
             .attr => return error.BadArgument,
+            .item => return error.BadArgument,
         }
     }
 
@@ -921,9 +922,41 @@ pub const Renderer = struct {
             .name, .tuple => try self.bindTarget(t, v),
             .attr => |a| {
                 const obj = self.resolve(a.object);
-                if (obj != .namespace)
-                    return self.fail(line, "`{s}.{s} = …` needs `{s}` to be a namespace()", .{ a.object, a.name, a.object }, error.TypeMismatch);
-                try obj.namespace.set(self.arena, a.name, v);
+                switch (obj) {
+                    .namespace => |n| {
+                        try n.set(self.arena, a.name, v);
+                    },
+                    .callable => |c| {
+                        var ctx = self.filterCtx();
+                        if (c.setAttr) |fn_ptr| {
+                            return fn_ptr(c.ctx, &ctx, a.name, v) catch |err| {
+                                return self.fail(line, "'{s}' set attr fail", .{a.name}, err);
+                            };
+                        }
+                    },
+                    else => {
+                        return self.fail(line, "`{s}.{s} = …` needs `{s}` to be a namespace() or setAttr method", .{ a.object, a.name, a.object }, error.TypeMismatch);
+                    },
+                }
+            },
+            .item => |i| {
+                const obj = self.resolve(i.object);
+                switch (obj) {
+                    .namespace => |n| {
+                        try n.set(self.arena, i.name, v);
+                    },
+                    .callable => |c| {
+                        var ctx = self.filterCtx();
+                        if (c.setItem) |fn_ptr| {
+                            return fn_ptr(c.ctx, &ctx, .fromString(i.name), v) catch |err| {
+                                return self.fail(line, "'{s}' set item fail", .{i.name}, err);
+                            };
+                        }
+                    },
+                    else => {
+                        return self.fail(line, "`{s}.{s} = …` needs `{s}` to be a namespace() or setAttr method", .{ i.object, i.name, i.object }, error.TypeMismatch);
+                    },
+                }
             },
         }
     }
@@ -934,6 +967,7 @@ pub const Renderer = struct {
                 return self.fail(line, "'{s}' is undefined", .{v.undef.name}, error.UndefinedValue);
             return;
         }
+
         if (!self.opts.autoescape or (v == .string and v.string.safe)) {
             // A plain string needs no formatting at all — write it straight
             // through, the same short-circuit `value.strAlloc` already takes,
@@ -1074,19 +1108,20 @@ pub const Renderer = struct {
         return err;
     }
 
-    pub fn evalArgs(self: *Renderer, a: ast.Args, line: usize) Error!filters.Args {
+    pub fn evalArgs(self: *Renderer, a: ast.Args, line: usize) Error!args_mod.Args {
         const pos = try self.arena.alloc(Value, a.positional.len);
         for (a.positional, 0..) |p, i| pos[i] = try self.eval(p, line);
-        const kw = try self.arena.alloc(filters.Kwarg, a.keyword.len);
+        const kw = try self.arena.alloc(args_mod.Kwarg, a.keyword.len);
         for (a.keyword, 0..) |k, i| kw[i] = .{ .name = k.name, .value = try self.eval(k.value, line) };
         return .{ .pos = pos, .kw = kw };
     }
 
-    pub fn filterCtx(self: *Renderer) filters.Ctx {
+    pub fn filterCtx(self: *Renderer) args_mod.Ctx {
         return .{
             .arena = self.arena,
             .io = self.io,
             .autoescape = self.opts.autoescape,
+            .diag = self.diag,
             .strict = self.opts.undefined_policy == .strict,
             .user = self,
             .callFilter = callFilterThunk,
@@ -1094,7 +1129,7 @@ pub const Renderer = struct {
         };
     }
 
-    pub fn callFilterThunk(ctx: *filters.Ctx, name: []const u8, input: Value, args: filters.Args) filters.Error!Value {
+    pub fn callFilterThunk(ctx: *args_mod.Ctx, name: []const u8, input: Value, args: args_mod.Args) args_mod.Error!Value {
         const self: *Renderer = @ptrCast(@alignCast(@constCast(ctx.user)));
         return self.applyFilter(name, input, args, 0) catch |e| switch (e) {
             error.OutOfMemory => error.OutOfMemory,
@@ -1111,14 +1146,14 @@ pub const Renderer = struct {
         };
     }
 
-    pub fn callTestThunk(ctx: *filters.Ctx, name: []const u8, input: Value, args: filters.Args) filters.Error!bool {
+    pub fn callTestThunk(ctx: *args_mod.Ctx, name: []const u8, input: Value, args: args_mod.Args) args_mod.Error!bool {
         const self: *Renderer = @ptrCast(@alignCast(@constCast(ctx.user)));
         const fn_ptr = self.lookup.test_fn(self.lookup.ctx, name) orelse return error.BadArgument;
         var sub = self.filterCtx();
         return fn_ptr(&sub, input, args);
     }
 
-    pub fn applyFilter(self: *Renderer, name: []const u8, input: Value, args: filters.Args, line: usize) Error!Value {
+    pub fn applyFilter(self: *Renderer, name: []const u8, input: Value, args: args_mod.Args, line: usize) Error!Value {
         const fn_ptr = self.lookup.filter(self.lookup.ctx, name) orelse
             return self.fail(line, "unknown filter '{s}'", .{name}, error.UnknownFilter);
         var ctx = self.filterCtx();
@@ -1135,32 +1170,35 @@ pub const Renderer = struct {
 
             if (self.lookup.global(self.lookup.ctx, name)) |fn_ptr| {
                 var ctx = self.filterCtx();
-                return fn_ptr(&ctx, args) catch |err| {
-                    return self.fail(c.line, "'{s}' call fail", .{name}, err);
+
+                return fn_ptr(&ctx, args) catch |err| switch (err) {
+                    error.DiagInvalidTemplateSyntax, error.DiagBadArgument => {
+                        const msg = self.arena.print("{s}", .{ctx.diag.message()}) catch return error.BadCall;
+                        return self.fail(c.line, "'{s}' call error: {s}", .{name, msg}, err);
+                    },
+                    else => return self.fail(c.line, "'{s}' call fail", .{name}, err),
                 };
             }
 
-            if (std.mem.eql(u8, name, "super") and self.block_stack.items.len != 0)
+            if (std.mem.eql(u8, name, "super") and self.block_stack.items.len != 0) {
                 return self.doSuper(c.line);
+            }
 
             const bound = self.resolve(name);
             if (bound == .macro) return self.callMacro(bound.macro, args, c.line);
-            if (bound == .caller) {
-                const caller = bound.caller;
+            if (bound == .callable) {
+                const callable = bound.callable;
                 var ctx = self.filterCtx();
-                return caller.call(caller.ctx, &ctx, args) catch |err| {
-                    return self.fail(c.line, "'{s}' function call fail", .{name}, err);
-                };
+
+                if (callable.call) |callFn| {
+                    return callFn(callable.ctx, &ctx, args) catch |err| {
+                        return self.fail(c.line, "'{s}' function call fail", .{name}, err);
+                    };
+                }
             }
 
             if (std.mem.eql(u8, name, "loop")) return self.recurseLoop(args, c.line);
             if (std.mem.eql(u8, name, "range")) return self.globalRange(args, c.line);
-            if (std.mem.eql(u8, name, "dict")) return self.globalDict(args) catch |err| {
-                return self.fail(c.line, "'{s}' call fail", .{name}, err);
-            };
-            if (std.mem.eql(u8, name, "namespace")) return self.globalNamespace(args) catch |err| {
-                return self.fail(c.line, "'{s}' call fail", .{name}, err);
-            };
 
             return self.fail(c.line, "'{s}' is not callable", .{name}, error.NotCallable);
         }
@@ -1168,7 +1206,7 @@ pub const Renderer = struct {
         return self.fail(c.line, "only the built-in globals are callable in this module", .{}, error.NotCallable);
     }
 
-    pub fn globalRange(self: *Renderer, args: filters.Args, line: usize) Error!Value {
+    pub fn globalRange(self: *Renderer, args: args_mod.Args, line: usize) Error!Value {
         if (args.pos.len == 0 or args.pos.len > 3) {
             return self.fail(line, "range() args invalid length", .{}, error.BadArgument);
         }
@@ -1214,30 +1252,6 @@ pub const Renderer = struct {
         return .{ .list = out };
     }
 
-    pub fn globalDict(self: *Renderer, args: filters.Args) Error!Value {
-        if (args.pos.len != 0) return error.BadArgument;
-        const pairs = try self.arena.alloc(value.Pair, args.kw.len);
-        for (args.kw, 0..) |k, i| pairs[i] = .{ .key = Value.fromString(k.name), .value = k.value };
-        return .{ .map = .{ .pairs = pairs } };
-    }
-
-    pub fn globalNamespace(self: *Renderer, args: filters.Args) Error!Value {
-        const ns = try self.arena.create(value.Namespace);
-        ns.* = .{};
-        for (args.pos) |p| {
-            const pairs = switch (p) {
-                .map => |m| m.pairs,
-                else => return error.BadArgument,
-            };
-            for (pairs) |pr| switch (pr.key) {
-                .string => |s| try ns.set(self.arena, s.bytes, pr.value),
-                else => return error.BadArgument,
-            };
-        }
-        for (args.kw) |k| try ns.set(self.arena, k.name, k.value);
-        return .{ .namespace = ns };
-    }
-
     // ── attribute / item / method access ────────────────────────────────────
 
     pub fn getAttr(self: *Renderer, obj: Value, name: []const u8, line: usize) Error!Value {
@@ -1245,6 +1259,16 @@ pub const Renderer = struct {
             .undef => return self.fail(line, "'{s}' is undefined, so '.{s}' cannot be read", .{ obj.undef.name, name }, error.UndefinedValue),
             .map => |m| return m.get(name) orelse .{ .undef = .{ .name = name } },
             .namespace => |ns| return ns.get(name) orelse .{ .undef = .{ .name = name } },
+            .callable => |c| {
+                if (c.getAttr) |fn_ptr| {
+                    var ctx = self.filterCtx();
+                    return fn_ptr(c.ctx, &ctx, name) catch |err| {
+                        return self.fail(line, "'{s}' get attr fail", .{name}, err);
+                    };
+                }
+
+                return .{ .undef = .{ .name = name } };
+            },
             .loop => |l| return self.loopAttr(l, name),
             .macro => |m| return self.macroAttr(m, name),
             else => return .{ .undef = .{ .name = name } },
@@ -1308,6 +1332,16 @@ pub const Renderer = struct {
                 if (idx == .string) return self.loopAttr(l, idx.string.bytes);
                 return .{ .undef = .{ .name = "key" } };
             },
+            .callable => |c| {
+                if (c.getItem) |fn_ptr| {
+                    var ctx = self.filterCtx();
+                    return fn_ptr(c.ctx, &ctx, idx) catch |err| {
+                        return self.fail(line, "get item fail", .{}, err);
+                    };
+                }
+
+                return .{ .undef = .{ .name = "item" } };
+            },
             else => return .{ .undef = .{ .name = "item" } },
         }
     }
@@ -1333,7 +1367,7 @@ pub const Renderer = struct {
         return .{ .list = picked };
     }
 
-    pub fn callMethod(self: *Renderer, obj: Value, name: []const u8, args: filters.Args, line: usize) Error!Value {
+    pub fn callMethod(self: *Renderer, obj: Value, name: []const u8, args: args_mod.Args, line: usize) Error!Value {
         // `{% import 'm' as m %}{{ m.hello() }}` — the attribute IS the macro.
         switch (obj) {
             .namespace => |ns| if (ns.get(name)) |v| {
@@ -1377,23 +1411,57 @@ pub const Renderer = struct {
         if (obj == .callable) {
             const c = obj.callable;
 
-            var ctx = self.filterCtx();
-            return c.call(c.ctx, &ctx, name, args) catch |err| {
-                return self.fail(line, "'{s}' method invalid call", .{name}, err);
-            };
+            if (c.callMethod) |call_method| {
+                var ctx = self.filterCtx();
+                return call_method(c.ctx, &ctx, name, args) catch |err| {
+                    return self.fail(line, "'{s}' method invalid call", .{name}, err);
+                };
+            }
         }
 
         if (self.lookup.method(self.lookup.ctx, name)) |fn_ptr| {
             var ctx = self.filterCtx();
-            return fn_ptr(&ctx, obj, args) catch |err| {
-                return self.fail(line, "'{s}' method call fail", .{name}, err);
+            return fn_ptr(&ctx, obj, args) catch |err| switch (err) {
+                error.DiagInvalidTemplateSyntax, error.DiagBadArgument => {
+                    const msg = self.arena.print("{s}", .{ctx.diag.message()}) catch return error.BadCall;
+                    return self.fail(line, "'{s}' method call error: {s}", .{name, msg}, err);
+                },
+                else => return self.fail(line, "'{s}' method call fail", .{name}, err),
             };
         }
 
-        return filters.callMethod(self.arena, self.io, obj, name, args, self.opts.autoescape) catch |err| switch (err) {
-            error.Unsupported => self.fail(line, "'{s}' objects have no method '{s}' in this module", .{ obj.typeName(), name }, error.NotCallable),
-            else => |other| other,
-        };
+        switch (obj) {
+            .undef => return error.UndefinedValue,
+            .map, .namespace => {
+                const pairs: []const value.Pair = switch (obj) {
+                    .map => |m| m.pairs,
+                    .namespace => |ns| ns.pairs.items,
+                    else => unreachable,
+                };
+
+                var ctx = self.filterCtx();
+                if (std.mem.eql(u8, name, "items")) return args_mod.pairsToList(&ctx, pairs);
+                if (std.mem.eql(u8, name, "keys")) {
+                    const out = try self.arena.alloc(Value, pairs.len);
+                    for (pairs, 0..) |p, i| out[i] = p.key;
+                    return .{ .list = out };
+                }
+                if (std.mem.eql(u8, name, "values")) {
+                    const out = try self.arena.alloc(Value, pairs.len);
+                    for (pairs, 0..) |p, i| out[i] = p.value;
+                    return .{ .list = out };
+                }
+                if (std.mem.eql(u8, name, "get")) {
+                    const key = args.get(0, "key") orelse return error.BadArgument;
+                    for (pairs) |p| if (value.valueEql(p.key, key)) return p.value;
+                    return args.get(1, "default") orelse .none;
+                }
+                return error.Unsupported;
+            },
+            else => {},
+        }
+
+        return self.fail(line, "'{s}' objects have no method '{s}' in this module", .{ obj.typeName(), name }, error.NotCallable);
     }
 };
 
@@ -1405,7 +1473,7 @@ pub fn intOf(v: Value) Error!i64 {
         // refuses a float in either position (`TypeError`, which `getitem`
         // turns into Undefined for the slice); this module truncates integral
         // floats but names the out-of-range case instead of trapping.
-        .float => |f| filters.intFromFloatChecked(f),
+        .float => |f| args_mod.intFromFloatChecked(f),
         else => error.BadArgument,
     };
 }

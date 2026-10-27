@@ -5,6 +5,10 @@ pub const Value = value.Value;
 pub const BinOp = value.BinOp;
 pub const CmpOp = value.CmpOp;
 
+pub const Error = error{
+    TemplateSyntaxError,
+};
+
 pub const Kwarg = struct {
     name: []const u8,
     value: *const Expr,
@@ -63,6 +67,8 @@ pub const Target = union(enum) {
     tuple: []const []const u8,
     /// `{% set ns.x = … %}`
     attr: struct { object: []const u8, name: []const u8 },
+    /// `{% set ns['x'] = … %}`
+    item: struct { object: []const u8, name: []const u8 },
 };
 
 pub const If = struct {
@@ -186,8 +192,6 @@ pub const CallBlock = struct {
     caller: MacroDef,
     line: usize,
 };
-
-pub const Error = error{TemplateSyntaxError};
 
 pub const Generic = struct {
     ctx: *const anyopaque,

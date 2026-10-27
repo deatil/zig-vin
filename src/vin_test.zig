@@ -2,7 +2,6 @@ const std = @import("std");
 const testing = std.testing;
 
 const vin = @import("vin.zig");
-const filters = vin.filters;
 const value = vin.value;
 
 test "DirLoader use dir" {
@@ -282,14 +281,14 @@ test "DirLoader create with Value create" {
     }
 }
 
-fn greet_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Value {
+fn greet_fn(ctx: *vin.Ctx, args: vin.Args) vin.ArgsError!vin.Value {
     const name_val = args.get(0, "name") orelse return error.BadArgument;
     const s = ctx.toStr(name_val) catch return error.BadArgument;
     const out = try ctx.arena.dupe(u8, s);
     return .{ .string = .{ .bytes = out, .safe = false } };
 }
 
-fn greet2_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Value {
+fn greet2_fn(ctx: *vin.Ctx, args: vin.Args) vin.ArgsError!vin.Value {
     const name_val = args.get(0, "name") orelse return error.BadArgument;
     const tul_val = args.get(1, "tul") orelse return error.BadArgument;
 
@@ -300,7 +299,7 @@ fn greet2_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Valu
     return .{ .string = .{ .bytes = out, .safe = false } };
 }
 
-fn greet3_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Value {
+fn greet3_fn(ctx: *vin.Ctx, args: vin.Args) vin.ArgsError!vin.Value {
     const name_val = args.byName("name") orelse return error.BadArgument;
     const tul_val = args.byName("tul") orelse return error.BadArgument;
 
@@ -398,7 +397,7 @@ test "Env addGlobal fail 2" {
     try testing.expectEqualStrings("line 1: 'greet3' call fail", msg);
 }
 
-fn greet_io_fn(ctx: *vin.FilterCtx, args: vin.FilterArgs) filters.Error!value.Value {
+fn greet_io_fn(ctx: *vin.Ctx, args: vin.Args) vin.ArgsError!vin.Value {
     const name_val = args.byName("name") orelse return error.BadArgument;
     const tul_val = args.byName("tul") orelse return error.BadArgument;
 
@@ -434,7 +433,7 @@ test "Env addGlobal with io" {
     try testing.expectEqualStrings("<fn2: Text,23678,17", out);
 }
 
-fn addString_fn(ctx: *vin.FilterCtx, input: value.Value, args: vin.FilterArgs) filters.Error!value.Value {
+fn addString_fn(ctx: *vin.Ctx, input: vin.Value, args: vin.Args) vin.ArgsError!vin.Value {
     const name_val = args.byName("name") orelse return error.BadArgument;
     const n = ctx.toStr(name_val) catch return error.BadArgument;
 
@@ -491,7 +490,48 @@ test "Env addMethod fail" {
     try testing.expectEqualStrings("line 1: 'addString' method call fail", msg);
 }
 
-fn cy_set_fn(ctx: *vin.FilterCtx, input: value.Value, args: vin.FilterArgs) filters.Error!value.Value {
+fn addString_fn2(ctx: *vin.Ctx, input: vin.Value, args: vin.Args) vin.ArgsError!vin.Value {
+    const name_val = args.byName("name") orelse return error.BadArgument;
+    const n = ctx.toStr(name_val) catch return error.BadArgument;
+
+    const in = ctx.toStr(input) catch return error.BadArgument;
+
+    if (!std.mem.eql(u8, in, "cycle")) {
+        ctx.diag.set(0, "input error: {s}", .{in});
+        return error.DiagInvalidTemplateSyntax;
+    }
+
+    const out = try ctx.arena.print("addstr: {s},{s}", .{ n, in });
+    return .{ .string = .{ .bytes = out, .safe = false } };
+}
+
+test "Env addMethod fail 2" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    try env.addMethod("addString", addString_fn2);
+
+    var tpl = try env.compile("<>{{ str.addString(name='Text') }}", null);
+    defer tpl.deinit();
+
+    var diag: vin.Diagnostic = undefined;
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .str = "user",
+    });
+    const out = tpl.render(alloc, ctx, &diag);
+
+    try testing.expectError(error.DiagInvalidTemplateSyntax, out);
+
+    const msg = try alloc.print("{f}", .{diag});
+    try testing.expectEqualStrings("line 1: 'addString' method call error: input error: user", msg);
+}
+
+fn cy_set_fn(ctx: *vin.Ctx, input: vin.Value, args: vin.Args) vin.ArgsError!vin.Value {
     const name_val = args.byName("name") orelse return error.BadArgument;
 
     if (input != .namespace) return error.TypeMismatch;
@@ -811,7 +851,7 @@ test "Value is and to" {
 const TestBA = struct {
     name: []const u8,
 
-    pub fn test_fn(ctx: *anyopaque, fctx: *vin.FilterCtx, method: []const u8, args: vin.FilterArgs) vin.FilterError!vin.Value {
+    pub fn test_fn(ctx: *anyopaque, fctx: *vin.Ctx, method: []const u8, args: vin.Args) vin.ArgsError!vin.Value {
         _ = fctx;
 
         var self: *TestBA = @ptrCast(@alignCast(ctx));
@@ -832,7 +872,7 @@ const TestBA = struct {
             return .fromString(n);
         }
         if (std.mem.eql(u8, method, "errors")) {
-            return vin.FilterError.InvalidMethod;
+            return error.InvalidMethod;
         }
 
         return .empty_string;
@@ -855,7 +895,7 @@ test "value callable" {
     };
     const val: vin.Value = .fromCallable(.{
         .ctx = &ba,
-        .call = TestBA.test_fn,
+        .callMethod = TestBA.test_fn,
     });
 
     try testing.expectEqual(true, val.isCallable());
@@ -884,7 +924,7 @@ test "value callable error" {
     };
     const val: vin.Value = .fromCallable(.{
         .ctx = &ba,
-        .call = TestBA.test_fn,
+        .callMethod = TestBA.test_fn,
     });
 
     try testing.expectEqual(true, val.isCallable());
@@ -1009,13 +1049,13 @@ test "for loop with continue and break fail" {
     }
 }
 
-fn fLength_test_fn(ctx: *vin.FilterCtx, input: vin.Value, args: vin.FilterArgs) vin.FilterError!vin.Value {
+fn fLength_test_fn(ctx: *vin.Ctx, input: vin.Value, args: vin.Args) vin.ArgsError!vin.Value {
     _ = ctx;
     _ = args;
     return .{ .integer = @intCast(try value.length(input)) };
 }
 
-fn tOdd_test_fn(ctx: *vin.FilterCtx, input: vin.Value, args: vin.FilterArgs) vin.FilterError!bool {
+fn tOdd_test_fn(ctx: *vin.Ctx, input: vin.Value, args: vin.Args) vin.ArgsError!bool {
     _ = ctx;
     _ = args;
     if (input != .integer) return error.TypeMismatch;
@@ -1072,7 +1112,7 @@ test "env bans" {
 }
 
 const TestCaller = struct {
-    pub fn test_fn(ctx: *anyopaque, fctx: *vin.FilterCtx, args: vin.FilterArgs) vin.FilterError!vin.Value {
+    pub fn test_fn(ctx: *anyopaque, fctx: *vin.Ctx, args: vin.Args) vin.ArgsError!vin.Value {
         _ = ctx;
         _ = fctx;
 
@@ -1094,12 +1134,12 @@ test "value caller" {
     defer tpl.deinit();
 
     var ba: TestCaller = .{};
-    const val: vin.Value = .fromCaller(.{
+    const val: vin.Value = .fromCallable(.{
         .ctx = &ba,
         .call = TestCaller.test_fn,
     });
 
-    try testing.expectEqual(true, val.isCaller());
+    try testing.expectEqual(true, val.isCallable());
 
     const ctx = try vin.valueFrom(alloc, .{
         .data = val,
@@ -1121,12 +1161,12 @@ test "value caller fail" {
     defer tpl.deinit();
 
     var ba: TestCaller = .{};
-    const val: vin.Value = .fromCaller(.{
+    const val: vin.Value = .fromCallable(.{
         .ctx = &ba,
         .call = TestCaller.test_fn,
     });
 
-    try testing.expectEqual(true, val.isCaller());
+    try testing.expectEqual(true, val.isCallable());
 
     var diag: vin.Diagnostic = undefined;
 
@@ -1139,4 +1179,148 @@ test "value caller fail" {
 
     const msg = try alloc.print("{f}", .{diag});
     try testing.expectEqualStrings("line 1: 'data' function call fail", msg);
+}
+
+const TestBA2 = struct {
+    name: []const u8,
+
+    pub fn setAttr(ctx: *anyopaque, fctx: *vin.Ctx, name: []const u8, val: vin.Value) vin.ArgsError!void {
+        _ = fctx;
+
+        var self: *TestBA2 = @ptrCast(@alignCast(ctx));
+
+        if (std.mem.eql(u8, name, "abc")) {
+            const v = val.toStrings() orelse "";
+            self.name = v;
+            return;
+        }
+
+        return error.BadArgument;
+    }
+
+    pub fn getAttr(ctx: *anyopaque, fctx: *vin.Ctx, name: []const u8) vin.ArgsError!vin.Value {
+        _ = fctx;
+
+        const self: *TestBA2 = @ptrCast(@alignCast(ctx));
+        
+        if (std.mem.eql(u8, name, "abc")) {
+            return .fromString(self.name);
+        }
+
+        return error.BadArgument;
+    }
+};
+
+test "value callable getAttr" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile("<>{{ data.abc }},{% set data.abc = 'ddddddd' %}{{ data.abc }}", null);
+    defer tpl.deinit();
+
+    var ba: TestBA2 = .{
+        .name = "test-data",
+    };
+    const val: vin.Value = .fromCallable(.{
+        .ctx = &ba,
+        .setAttr = TestBA2.setAttr,
+        .getAttr = TestBA2.getAttr,
+    });
+
+    try testing.expectEqual(true, val.isCallable());
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .data = val,
+    });
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("<>test-data,ddddddd", out);
+}
+
+const TestBA3 = struct {
+    name: []const u8,
+
+    pub fn setItem(ctx: *anyopaque, fctx: *vin.Ctx, idx: vin.Value, val: vin.Value) vin.ArgsError!void {
+        _ = fctx;
+
+        var self: *TestBA3 = @ptrCast(@alignCast(ctx));
+
+        const name: vin.Value = .fromString("abb");
+        if (vin.value.valueEql(name, idx)) {
+            const v = val.toStrings() orelse "";
+            self.name = v;
+            return;
+        }
+
+        return error.BadArgument;
+    }
+
+    pub fn getItem(ctx: *anyopaque, fctx: *vin.Ctx, idx: vin.Value) vin.ArgsError!vin.Value {
+        _ = fctx;
+
+        const self: *TestBA3 = @ptrCast(@alignCast(ctx));
+        
+        const name: vin.Value = .fromString("abb");
+        if (vin.value.valueEql(name, idx)) {
+            return .fromString(self.name);
+        }
+
+        return error.BadArgument;
+    }
+};
+
+test "value callable getAttr 2" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile("<>{{ data['abb'] }},{% set data['abb'] = 'ddddddd6' %}{{ data['abb'] }}", null);
+    defer tpl.deinit();
+
+    var ba: TestBA3 = .{
+        .name = "test-data",
+    };
+    const val: vin.Value = .fromCallable(.{
+        .ctx = &ba,
+        .setItem = TestBA3.setItem,
+        .getItem = TestBA3.getItem,
+    });
+
+    try testing.expectEqual(true, val.isCallable());
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .data = val,
+    });
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("<>test-data,ddddddd6", out);
+}
+
+test "env range fail" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile("{% for i in range() %}{{ i }}{% endfor %}|{% for i in range(2, 8, 3) %}{{ i }}{% endfor %}|{% for i in range(3, 0, -1) %}{{ i }}{% endfor %}", null);
+    defer tpl.deinit();
+
+    var diag: vin.Diagnostic = undefined;
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = tpl.render(alloc, ctx, &diag);
+
+    try testing.expectError(error.BadArgument, out);
+
+    const msg = try alloc.print("{f}", .{diag});
+    try testing.expectEqualStrings("line 1: range() args invalid length", msg);
 }

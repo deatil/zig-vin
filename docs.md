@@ -49,8 +49,7 @@ does not have is an error. The reference implementation's default is the
 opposite, and renders empty. For the workload this module exists for —
 generating device configuration — an empty string where an address belonged
 is worse than a failed render, so the default is inverted deliberately. Pass
-`.undefined_policy = .lenient` for the reference's behaviour. Documented as
-divergence D1 in SPEC.md.
+`.undefined_policy = .lenient` for the reference's behaviour.
 
 **Autoescaping.** Off unless `.autoescape = true`. There is no guessing from
 a file extension (this module has no file loader), and `|safe`/`|escape`
@@ -76,12 +75,6 @@ magnitude, and values print with CPython's `repr` — `True`, `None`, `1.0`,
 corrupt such output — what happens to an undefined variable, and whether output
 is HTML-escaped — are explicit options rather than defaults you discover in
 production.
-
-Anything the reference has that this does not — i18n (`{% trans %}`), the
-`{% autoescape %}` block, eight filters, four tests, three globals — is a
-**compile error naming the tag or name**, never a silent no-op. `SPEC.md` §6
-lists every one.
-
 
 ## The context
 
@@ -109,7 +102,7 @@ Maps are **ordered pair slices**, so the order you supply keys in is the order
 
 ### Using it with the `yaml` module
 
-`vin` deliberately depends on nothing but std (see `SPEC.md` §2). A context
+`vin` deliberately depends on nothing but std. A context
 from `modules/yaml` is a twenty-line conversion, and ordering survives it
 because both sides keep mappings as ordered pairs:
 
@@ -240,8 +233,7 @@ an error means "the loader refused or failed". Two are shipped:
   then the path is walked one component at a time with `follow_symlinks = false`
   on every open, so no symlink anywhere along it is traversed and no re-resolved
   string is ever handed back to the kernel. `resolve_beneath` is requested too,
-  where the platform has it. See `SPEC.md` §10 for the guarantee, the two
-  deliberate strictnesses, and the one thing it does not promise.
+  where the platform has it. 
 
 ```zig
 var dl: vin.DirLoader = .{
@@ -258,7 +250,6 @@ touches a filesystem.
 Cycles and runaway expansion are bounded structurally, not by hoping: an
 inheritance cycle is caught by *name* while the chain is built, and include /
 import nesting, macro recursion and `loop()` recursion each hit a depth cap.
-`SPEC.md` §10 names the tests that fire the bombs.
 
 ## Whitespace control
 
@@ -304,15 +295,11 @@ attribute='n')`, `join(', ', attribute='name')`, `default('x', true)`,
 `min`, `max`, `unique` and `dictsort` are case-**insensitive** by default, as
 there.
 
-Filters deliberately **not** implemented — `attr`, `filesizeformat`, `format`,
-`groupby`, `pprint`, `random`, `urlize`, `wordwrap` — and why, are listed in
-`SPEC.md` §6.
-
 ### Registering your own
 
 ```zig
 try env.addFilter("netmask", struct {
-    fn f(ctx: *vin.FilterCtx, input: vin.Value, args: vin.FilterArgs) vin.FilterError!vin.Value {
+    fn f(ctx: *vin.Ctx, input: vin.Value, args: vin.Args) vin.ArgsError!vin.Value {
         _ = args;
         const bits = switch (input) { .integer => |i| i, else => return error.TypeMismatch };
         // ctx.arena is the render arena; ctx.toStr(v) honours the undefined policy.

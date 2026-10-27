@@ -701,11 +701,20 @@ pub const Stream = struct {
             const t = self.peek() orelse return self.p.failAt(line, "expected an assignment target");
             if (t.kind != .name) return self.p.failAt(line, "assignment target must be a name");
             _ = self.next();
+            // for attr set
             if (allow_attr and names.items.len == 0 and self.peek() != null and self.peek().?.kind == .dot) {
                 _ = self.next();
                 const attr = try self.expect(.name, line, "expected an attribute name after `.`");
                 if (paren) _ = self.eat(.rparen);
                 return .{ .attr = .{ .object = t.text, .name = attr.text } };
+            }
+            // for item set, {% set a['x'] = .. %}
+            if (allow_attr and names.items.len == 0 and self.peek() != null and self.peek().?.kind == .lbracket) {
+                _ = self.next();
+                const item = try self.expect(.string, line, "expected an item name after `.`");
+                _ = self.eat(.rbracket);
+                if (paren) _ = self.eat(.rparen);
+                return .{ .item = .{ .object = t.text, .name = item.text } };
             }
             try names.append(self.p.arena, t.text);
             if (self.eat(.comma)) continue;

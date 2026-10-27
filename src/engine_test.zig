@@ -114,7 +114,7 @@ test "a caller can register its own filter and test" {
     var env = try vin.Environment.init(gpa, .{});
     defer env.deinit();
     try env.addFilter("netmask", struct {
-        fn f(ctx: *vin.FilterCtx, input: vin.Value, args: vin.FilterArgs) vin.FilterError!vin.Value {
+        fn f(ctx: *vin.Ctx, input: vin.Value, args: vin.Args) vin.ArgsError!vin.Value {
             _ = args;
             const bits = switch (input) {
                 .integer => |i| i,
@@ -128,7 +128,7 @@ test "a caller can register its own filter and test" {
         }
     }.f);
     try env.addTest("private", struct {
-        fn f(ctx: *vin.FilterCtx, input: vin.Value, args: vin.FilterArgs) vin.FilterError!bool {
+        fn f(ctx: *vin.Ctx, input: vin.Value, args: vin.Args) vin.ArgsError!bool {
             _ = args;
             const s = try ctx.toStr(input);
             return std.mem.startsWith(u8, s, "10.") or std.mem.startsWith(u8, s, "192.168.");
@@ -249,7 +249,7 @@ test "a macro in an imported template can use a filter the CALLER registered" {
     var env = try vin.Environment.initWithLoader(gpa, .{}, map.loader());
     defer env.deinit();
     try env.addFilter("netbits", struct {
-        fn f(ctx: *vin.FilterCtx, input: vin.Value, args: vin.FilterArgs) vin.FilterError!vin.Value {
+        fn f(ctx: *vin.Ctx, input: vin.Value, args: vin.Args) vin.ArgsError!vin.Value {
             _ = ctx;
             _ = args;
             const s = switch (input) {

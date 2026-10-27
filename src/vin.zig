@@ -9,7 +9,7 @@ pub const ast = @import("ast.zig");
 pub const parser = @import("parser.zig");
 pub const renders = @import("render.zig");
 pub const loaders = @import("loader.zig");
-pub const filters = @import("filters.zig");
+pub const args = @import("args.zig");
 pub const value = @import("value.zig");
 
 pub const Parser = parser.Parser;
@@ -24,10 +24,7 @@ pub const Pair = value.Pair;
 pub const Map = value.Map;
 pub const Namespace = value.Namespace;
 pub const Callable = value.Callable;
-pub const Caller = value.Caller;
 pub const Undefined = value.Undefined;
-
-// first code from https://github.com/zaxified/zig-libs
 
 /// Build a `Value` from ordinary Zig data — structs become ordered maps in
 /// field order, `[]const u8` becomes a string, slices become lists.
@@ -95,14 +92,15 @@ pub const RenderError = renders.Error;
 pub const Error = AstError || CompileError || RenderError;
 
 /// Filter/test authoring surface, for `Environment.addFilter`/`addTest`/`addGlobal`/`addMethod`.
-pub const FilterCtx = filters.Ctx;
-pub const FilterArgs = filters.Args;
-pub const FilterError = filters.Error;
-pub const FilterKwarg = filters.Kwarg;
-pub const FilterFn = filters.Fn;
-pub const TestFn = filters.TestFn;
-pub const GlobalFn = filters.GlobalFn;
-pub const MethodFn = filters.MethodFn;
+pub const Ctx = args.Ctx;
+pub const Args = args.Args;
+pub const Kwarg = args.Kwarg;
+pub const ArgsError = args.Error;
+
+pub const FilterFn = args.FilterFn;
+pub const TestFn = args.TestFn;
+pub const GlobalFn = args.GlobalFn;
+pub const MethodFn = args.MethodFn;
 pub const TagFn = parser.TagFn;
 
 const defaults = @import("defaults.zig");
@@ -139,14 +137,17 @@ pub const Environment = struct {
         var env: Environment = .{ .gpa = gpa, .options = options, .loader = template_loader };
         errdefer env.deinit();
 
-        for (filters.builtin_filters) |e| {
+        for (defaults.builtin_filters) |e| {
             try env.filters.put(gpa, e.name, e.func);
         }
-        for (filters.builtin_tests) |e| {
+        for (defaults.builtin_tests) |e| {
             try env.tests.put(gpa, e.name, e.func);
         }
         for (defaults.builtin_globals) |e| {
             try env.globals.put(gpa, e.name, e.func);
+        }
+        for (defaults.builtin_methods) |e| {
+            try env.methods.put(gpa, e.name, e.func);
         }
 
         return env;
@@ -156,6 +157,8 @@ pub const Environment = struct {
         self.filters.deinit(self.gpa);
         self.tests.deinit(self.gpa);
         self.globals.deinit(self.gpa);
+        self.methods.deinit(self.gpa);
+        self.tags.deinit(self.gpa);
         self.* = undefined;
     }
 
@@ -531,7 +534,7 @@ test {
     _ = @import("parser.zig");
     _ = @import("ast.zig");
     _ = @import("render.zig");
-    _ = @import("filters.zig");
+    _ = @import("args.zig");
     _ = @import("diag.zig");
     _ = @import("engine_test.zig");
     _ = @import("conform.zig");
