@@ -10,7 +10,11 @@ const Expr = ast.Expr;
 const Node = ast.Node;
 const Value = value.Value;
 
-pub const Error = error{ OutOfMemory, TemplateSyntaxError, TooDeep };
+pub const Error = error{
+    OutOfMemory,
+    TemplateSyntaxError,
+    TooDeep,
+};
 pub const Diagnostic = lex.Diagnostic;
 
 /// Bounds the parser enforces on the *shape* of one template's source.

@@ -1,8 +1,10 @@
 const std = @import("std");
 const testing = std.testing;
+const Allocator = std.mem.Allocator;
+
 const vin = @import("vin.zig");
 
-fn renderWith(gpa: std.mem.Allocator, opts: vin.Options, src: []const u8, ctx: vin.Value) ![]u8 {
+fn renderWith(gpa: Allocator, opts: vin.Options, src: []const u8, ctx: vin.Value) ![]u8 {
     var env = try vin.Environment.init(gpa, opts);
     defer env.deinit();
     return env.renderAlloc(src, ctx, null);
@@ -366,7 +368,7 @@ const Parts = struct {
 };
 
 /// `pre ++ open*n ++ mid ++ close*n ++ post`.
-fn nestedSrc(gpa: std.mem.Allocator, parts: Parts, n: usize) ![]u8 {
+fn nestedSrc(gpa: Allocator, parts: Parts, n: usize) ![]u8 {
     var b: std.ArrayList(u8) = .empty;
     errdefer b.deinit(gpa);
     try b.appendSlice(gpa, parts.pre);

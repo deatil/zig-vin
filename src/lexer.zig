@@ -13,7 +13,10 @@ pub const Options = struct {
     keep_trailing_newline: bool = false,
 };
 
-pub const Error = error{ OutOfMemory, TemplateSyntaxError };
+pub const Error = error{
+    OutOfMemory,
+    TemplateSyntaxError,
+};
 
 pub const Kind = enum {
     name,
