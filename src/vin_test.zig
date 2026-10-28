@@ -1266,7 +1266,7 @@ const TestBA3 = struct {
             return;
         }
 
-        const q2: vin.Value = .fromUndef("qqq");
+        const q2: vin.Value = .fromString("qqq");
         if (vin.value.valueEql(q2, idx)) {
             const v = val.toStrings() orelse "";
             self.name2 = v;
@@ -1298,7 +1298,7 @@ const TestBA3 = struct {
             return .fromInt(self.iv);
         }
 
-        const q2: vin.Value = .fromUndef("qqq");
+        const q2: vin.Value = .fromString("qqq");
         if (vin.value.valueEql(q2, idx)) {
             return .fromString(self.name2);
         }

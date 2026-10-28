@@ -742,10 +742,7 @@ pub const Stream = struct {
 
                 var name_val: ast.ItemName = undefined;
                 switch (item.kind) {
-                    .name => {
-                        name_val = .{ .name = item.text };
-                    },
-                    .string => {
+                    .name, .string => {
                         name_val = .{ .text = item.text };
                     },
                     .integer => {

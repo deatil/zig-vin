@@ -942,7 +942,6 @@ pub const Renderer = struct {
             .item => |i| {
                 var idx: Value = undefined;
                 switch (i.name) {
-                    .name => |new_n| idx = .fromUndef(new_n),
                     .text => |new_t| idx = .fromString(new_t),
                     .int => |new_i| idx = .fromInt(new_i),
                     .float => |new_f| idx = .fromFloat(new_f),
@@ -1012,7 +1011,6 @@ pub const Renderer = struct {
                 if (self.block_input) |bi| {
                     if (std.mem.eql(u8, n, ast.filter_block_input.name)) return bi;
                 }
-
                 return self.resolve(n);
             },
             .list => |items| {
@@ -1348,7 +1346,15 @@ pub const Renderer = struct {
             .callable => |c| {
                 if (c.getItem) |fn_ptr| {
                     var ctx = self.filterCtx();
-                    return fn_ptr(c.ctx, &ctx, idx) catch |err| {
+
+                    var new_idx: Value = undefined;
+                    if (idx == .undef) {
+                        new_idx = .fromString(idx.undef.name);
+                    } else {
+                        new_idx = idx;
+                    }
+
+                    return fn_ptr(c.ctx, &ctx, new_idx) catch |err| {
                         return self.fail(line, "get item fail", .{}, err);
                     };
                 }

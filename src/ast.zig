@@ -62,7 +62,6 @@ pub const Expr = union(enum) {
 
 pub const ItemName = union(enum) {
     none,
-    name: []const u8,
     text: []const u8,
     int: i64,
     float: f64,
