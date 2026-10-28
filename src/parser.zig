@@ -664,6 +664,19 @@ pub const Stream = struct {
         return self.p.failAt(line, msg);
     }
 
+    pub fn expects(self: *Stream, ks: []const lex.Kind, line: usize, comptime msg: []const u8) Error!Token {
+        if (self.peek()) |t| {
+            for (ks) |k| {
+                if (t.kind == k) {
+                    self.i += 1;
+                    return t;
+                }
+            }
+        }
+
+        return self.p.failAt(line, msg);
+    }
+
     pub fn expectEnd(self: *Stream, line: usize) Error!void {
         if (self.i != self.toks.len) return self.p.failAt(line, "trailing tokens in tag");
     }
@@ -698,28 +711,56 @@ pub const Stream = struct {
 
     // ── targets ─────────────────────────────────────────────────────────────
 
-    pub fn parseTarget(self: *Stream, line: usize, allow_attr: bool) Error!ast.Target {
+    pub fn parseTarget(self: *Stream, line: usize, allow_attr_or_item: bool) Error!ast.Target {
         const paren = self.eat(.lparen);
         var names: std.ArrayList([]const u8) = .empty;
         while (true) {
             const t = self.peek() orelse return self.p.failAt(line, "expected an assignment target");
             if (t.kind != .name) return self.p.failAt(line, "assignment target must be a name");
             _ = self.next();
+
             // for attr set
-            if (allow_attr and names.items.len == 0 and self.peek() != null and self.peek().?.kind == .dot) {
+            if (allow_attr_or_item and names.items.len == 0 and self.peek() != null and self.peek().?.kind == .dot) {
                 _ = self.next();
                 const attr = try self.expect(.name, line, "expected an attribute name after `.`");
                 if (paren) _ = self.eat(.rparen);
                 return .{ .attr = .{ .object = t.text, .name = attr.text } };
             }
+
             // for item set, {% set a['x'] = .. %}
-            if (allow_attr and names.items.len == 0 and self.peek() != null and self.peek().?.kind == .lbracket) {
+            if (allow_attr_or_item and names.items.len == 0 and self.peek() != null and self.peek().?.kind == .lbracket) {
                 _ = self.next();
-                const item = try self.expect(.string, line, "expected an item name after `.`");
-                _ = self.eat(.rbracket);
+
+                const item = try self.expects(&.{
+                    .name,    .string,
+                    .integer, .float,
+                }, line, "expected an item name after `[`");
+
+                if (!self.eat(.rbracket)) {
+                    return self.p.failAt(line, "right bracket must set");
+                }
+
+                var name_val: ast.ItemName = undefined;
+                switch (item.kind) {
+                    .name => {
+                        name_val = .{ .name = item.text };
+                    },
+                    .string => {
+                        name_val = .{ .text = item.text };
+                    },
+                    .integer => {
+                        name_val = .{ .int = item.int };
+                    },
+                    .float => {
+                        name_val = .{ .float = item.float };
+                    },
+                    else => {},
+                }
+
                 if (paren) _ = self.eat(.rparen);
-                return .{ .item = .{ .object = t.text, .name = item.text } };
+                return .{ .item = .{ .object = t.text, .name = name_val } };
             }
+
             try names.append(self.p.arena, t.text);
             if (self.eat(.comma)) continue;
             break;

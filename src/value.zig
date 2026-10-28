@@ -189,6 +189,10 @@ pub const Value = union(enum) {
         return val_ptr.*;
     }
 
+    pub fn fromUndef(name: []const u8) Value {
+        return .{ .undef = .{ .name = name } };
+    }
+
     pub fn fromBool(boolean: bool) Value {
         return .{ .boolean = boolean };
     }
@@ -741,7 +745,7 @@ pub fn floatTo(writer: *Writer, f: f64) Error!void {
 pub const BinOp = enum { add, sub, mul, div, floordiv, mod, pow, concat };
 pub const CmpOp = enum { eq, ne, lt, le, gt, ge, in, not_in };
 
-fn asFloat(v: Value) ?f64 {
+pub fn asFloat(v: Value) ?f64 {
     return switch (v) {
         .integer => |i| @floatFromInt(i),
         .float => |f| f,
@@ -750,7 +754,7 @@ fn asFloat(v: Value) ?f64 {
     };
 }
 
-fn asInt(v: Value) ?i64 {
+pub fn asInt(v: Value) ?i64 {
     return switch (v) {
         .integer => |i| i,
         .boolean => |b| @intFromBool(b),
@@ -758,7 +762,7 @@ fn asInt(v: Value) ?i64 {
     };
 }
 
-fn isNumeric(v: Value) bool {
+pub fn isNumeric(v: Value) bool {
     return v == .integer or v == .float or v == .boolean;
 }
 
@@ -836,7 +840,7 @@ pub fn binary(arena: Allocator, op: BinOp, a: Value, b: Value) Error!Value {
     };
 }
 
-fn intOf(r: anytype) Error!Value {
+pub fn intOf(r: anytype) Error!Value {
     return .{ .integer = r catch return error.OutOfRange };
 }
 

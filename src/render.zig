@@ -940,21 +940,33 @@ pub const Renderer = struct {
                 }
             },
             .item => |i| {
+                var idx: Value = undefined;
+                switch (i.name) {
+                    .name => |new_n| idx = .fromUndef(new_n),
+                    .text => |new_t| idx = .fromString(new_t),
+                    .int => |new_i| idx = .fromInt(new_i),
+                    .float => |new_f| idx = .fromFloat(new_f),
+                    else => idx = .empty_string,
+                }
+
                 const obj = self.resolve(i.object);
                 switch (obj) {
                     .namespace => |n| {
-                        try n.set(self.arena, i.name, v);
+                        const idx_str = try value.strAlloc(self.arena, idx);
+                        try n.set(self.arena, idx_str, v);
                     },
                     .callable => |c| {
                         var ctx = self.filterCtx();
                         if (c.setItem) |fn_ptr| {
-                            return fn_ptr(c.ctx, &ctx, .fromString(i.name), v) catch |err| {
-                                return self.fail(line, "'{s}' set item fail", .{i.name}, err);
+                            return fn_ptr(c.ctx, &ctx, idx, v) catch |err| {
+                                const idx_str = try value.strAlloc(self.arena, idx);
+                                return self.fail(line, "'{s}' set item fail", .{idx_str}, err);
                             };
                         }
                     },
                     else => {
-                        return self.fail(line, "`{s}.{s} = …` needs `{s}` to be a namespace() or setAttr method", .{ i.object, i.name, i.object }, error.TypeMismatch);
+                        const idx_str = try value.strAlloc(self.arena, idx);
+                        return self.fail(line, "`{s}.{s} = …` needs `{s}` to be a namespace() or setAttr method", .{ i.object, idx_str, i.object }, error.TypeMismatch);
                     },
                 }
             },
@@ -1000,6 +1012,7 @@ pub const Renderer = struct {
                 if (self.block_input) |bi| {
                     if (std.mem.eql(u8, n, ast.filter_block_input.name)) return bi;
                 }
+
                 return self.resolve(n);
             },
             .list => |items| {

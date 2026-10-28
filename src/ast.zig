@@ -60,6 +60,14 @@ pub const Expr = union(enum) {
     method: struct { obj: *const Expr, name: []const u8, args: Args, line: usize },
 };
 
+pub const ItemName = union(enum) {
+    none,
+    name: []const u8,
+    text: []const u8,
+    int: i64,
+    float: f64,
+};
+
 pub const Target = union(enum) {
     /// `{% set x = … %}`
     name: []const u8,
@@ -68,7 +76,7 @@ pub const Target = union(enum) {
     /// `{% set ns.x = … %}`
     attr: struct { object: []const u8, name: []const u8 },
     /// `{% set ns['x'] = … %}`
-    item: struct { object: []const u8, name: []const u8 },
+    item: struct { object: []const u8, name: ItemName },
 };
 
 pub const If = struct {

@@ -1243,6 +1243,9 @@ test "value callable getAttr" {
 
 const TestBA3 = struct {
     name: []const u8,
+    name2: []const u8,
+    iv: i64,
+    fv: f64,
 
     pub fn setItem(ctx: *anyopaque, fctx: *vin.Ctx, idx: vin.Value, val: vin.Value) vin.ArgsError!void {
         _ = fctx;
@@ -1253,6 +1256,27 @@ const TestBA3 = struct {
         if (vin.value.valueEql(name, idx)) {
             const v = val.toStrings() orelse "";
             self.name = v;
+            return;
+        }
+
+        const index: vin.Value = .fromInt(1);
+        if (vin.value.valueEql(index, idx)) {
+            const v = val.toInt() orelse 0;
+            self.iv = v;
+            return;
+        }
+
+        const q2: vin.Value = .fromUndef("qqq");
+        if (vin.value.valueEql(q2, idx)) {
+            const v = val.toStrings() orelse "";
+            self.name2 = v;
+            return;
+        }
+
+        const index2: vin.Value = .fromFloat(3.2);
+        if (vin.value.valueEql(index2, idx)) {
+            const v = val.toFloat() orelse 0.0;
+            self.fv = v;
             return;
         }
 
@@ -1269,11 +1293,26 @@ const TestBA3 = struct {
             return .fromString(self.name);
         }
 
+        const index: vin.Value = .fromInt(1);
+        if (vin.value.valueEql(index, idx)) {
+            return .fromInt(self.iv);
+        }
+
+        const q2: vin.Value = .fromUndef("qqq");
+        if (vin.value.valueEql(q2, idx)) {
+            return .fromString(self.name2);
+        }
+
+        const index2: vin.Value = .fromFloat(3.2);
+        if (vin.value.valueEql(index2, idx)) {
+            return .fromFloat(self.fv);
+        }
+
         return error.BadArgument;
     }
 };
 
-test "value callable getAttr 2" {
+test "value callable getItem" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const alloc = arena.allocator();
@@ -1281,11 +1320,19 @@ test "value callable getAttr 2" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile("<>{{ data['abb'] }},{% set data['abb'] = 'ddddddd6' %}{{ data['abb'] }}", null);
+    const src = "<>{{ data['abb'] }},{% set data['abb'] = 'ddddddd6' %}{{ data['abb'] }}" ++
+        "|{{ data[qqq] }},{% set data[qqq] = 'ddddddd7' %}{{ data[qqq] }}" ++
+        "|{{ data[1] }},{% set data[1] = 7 %}{{ data[1] }}" ++
+        "|{{ data[3.2] }},{% set data[3.2] = 9.5 %}{{ data[3.2] }}";
+
+    var tpl = try env.compile(src, null);
     defer tpl.deinit();
 
     var ba: TestBA3 = .{
         .name = "test-data",
+        .name2 = "test-data2",
+        .iv = 12,
+        .fv = 3.5,
     };
     const val: vin.Value = .fromCallable(.{
         .ctx = &ba,
@@ -1300,7 +1347,11 @@ test "value callable getAttr 2" {
     });
     const out = try tpl.render(alloc, ctx, null);
 
-    try testing.expectEqualStrings("<>test-data,ddddddd6", out);
+    const expect = "<>test-data,ddddddd6" ++ 
+        "|test-data2,ddddddd7" ++ 
+        "|12,7" ++
+        "|3.5,9.5";
+    try testing.expectEqualStrings(expect, out);
 }
 
 test "env range fail" {
