@@ -148,18 +148,6 @@ pub fn isTitleBoundary(c: u8) bool {
     };
 }
 
-pub fn titleMethod(ctx: *Ctx, input: Value) Error!Value {
-    const s = try ctx.toStr(input);
-    const out = try ctx.arena.dupe(u8, s);
-    var at_start = true;
-    for (out) |*c| {
-        const alpha = std.ascii.isAlphabetic(c.*);
-        c.* = if (at_start) std.ascii.toUpper(c.*) else std.ascii.toLower(c.*);
-        at_start = !alpha;
-    }
-    return markupAware(ctx, input, out);
-}
-
 /// `do_xmlattr`'s `re.compile(r"[\s/>=]", re.ASCII)`: ASCII whitespace, `/`,
 /// `>` and `=` cannot appear in an attribute name.
 pub fn invalidAttrKey(key: []const u8) bool {

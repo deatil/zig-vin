@@ -666,12 +666,10 @@ pub const Stream = struct {
 
     pub fn expects(self: *Stream, ks: []const lex.Kind, line: usize, comptime msg: []const u8) Error!Token {
         if (self.peek()) |t| {
-            for (ks) |k| {
-                if (t.kind == k) {
-                    self.i += 1;
-                    return t;
-                }
-            }
+            for (ks) |k| if (t.kind == k) {
+                self.i += 1;
+                return t;
+            };
         }
 
         return self.p.failAt(line, msg);
@@ -719,43 +717,49 @@ pub const Stream = struct {
             if (t.kind != .name) return self.p.failAt(line, "assignment target must be a name");
             _ = self.next();
 
-            // for attr set
-            if (allow_attr_or_item and names.items.len == 0 and self.peek() != null and self.peek().?.kind == .dot) {
-                _ = self.next();
-                const attr = try self.expect(.name, line, "expected an attribute name after `.`");
-                if (paren) _ = self.eat(.rparen);
-                return .{ .attr = .{ .object = t.text, .name = attr.text } };
-            }
+            if (allow_attr_or_item and names.items.len == 0) {
+                if (self.peek()) |sk| {
+                    // for attr set
+                    if (sk.kind == .dot) {
+                        _ = self.next();
 
-            // for item set, {% set a['x'] = .. %}
-            if (allow_attr_or_item and names.items.len == 0 and self.peek() != null and self.peek().?.kind == .lbracket) {
-                _ = self.next();
+                        const attr = try self.expect(.name, line, "expected an attribute name after `.`");
+                        if (paren) _ = self.eat(.rparen);
 
-                const item = try self.expects(&.{
-                    .name,    .string,
-                    .integer, .float,
-                }, line, "expected an item name after `[`");
+                        return .{ .attr = .{ .object = t.text, .name = attr.text } };
+                    }
 
-                if (!self.eat(.rbracket)) {
-                    return self.p.failAt(line, "right bracket must set");
+                    // for item set, {% set a['x'] = .. %}
+                    if (sk.kind == .lbracket) {
+                        _ = self.next();
+
+                        const item = try self.expects(&.{
+                            .name,    .string,
+                            .integer, .float,
+                        }, line, "expected an item name after `[`");
+
+                        if (!self.eat(.rbracket)) {
+                            return self.p.failAt(line, "right bracket must set");
+                        }
+
+                        var name_val: ast.ItemName = undefined;
+                        switch (item.kind) {
+                            .name, .string => {
+                                name_val = .{ .text = item.text };
+                            },
+                            .integer => {
+                                name_val = .{ .int = item.int };
+                            },
+                            .float => {
+                                name_val = .{ .float = item.float };
+                            },
+                            else => {},
+                        }
+
+                        if (paren) _ = self.eat(.rparen);
+                        return .{ .item = .{ .object = t.text, .name = name_val } };
+                    }
                 }
-
-                var name_val: ast.ItemName = undefined;
-                switch (item.kind) {
-                    .name, .string => {
-                        name_val = .{ .text = item.text };
-                    },
-                    .integer => {
-                        name_val = .{ .int = item.int };
-                    },
-                    .float => {
-                        name_val = .{ .float = item.float };
-                    },
-                    else => {},
-                }
-
-                if (paren) _ = self.eat(.rparen);
-                return .{ .item = .{ .object = t.text, .name = name_val } };
             }
 
             try names.append(self.p.arena, t.text);

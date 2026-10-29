@@ -16,6 +16,18 @@ const Args = args_mod.Args;
 const Value = value.Value;
 const Error = value.Error;
 
+fn titleMethod(ctx: *Ctx, input: Value) Error!Value {
+    const s = try ctx.toStr(input);
+    const out = try ctx.arena.dupe(u8, s);
+    var at_start = true;
+    for (out) |*c| {
+        const alpha = std.ascii.isAlphabetic(c.*);
+        c.* = if (at_start) std.ascii.toUpper(c.*) else std.ascii.toLower(c.*);
+        at_start = !alpha;
+    }
+    return args_mod.markupAware(ctx, input, out);
+}
+
 fn fUpper(ctx: *Ctx, input: Value, args: Args) Error!Value {
     _ = args;
     const s = try ctx.toStr(input);
@@ -1529,7 +1541,7 @@ fn stringMethod(ctx: *Ctx, input: Value, name: []const u8, args: Args) Error!Val
     const s = input.string;
     if (std.mem.eql(u8, name, "upper")) return fUpper(ctx, input, args);
     if (std.mem.eql(u8, name, "lower")) return fLower(ctx, input, args);
-    if (std.mem.eql(u8, name, "title")) return args_mod.titleMethod(ctx, input);
+    if (std.mem.eql(u8, name, "title")) return titleMethod(ctx, input);
     if (std.mem.eql(u8, name, "capitalize")) return fCapitalize(ctx, input, args);
     if (std.mem.eql(u8, name, "strip")) return fTrim(ctx, input, args);
     if (std.mem.eql(u8, name, "replace")) return replaceMethod(ctx, s, args);
