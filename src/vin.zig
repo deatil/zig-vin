@@ -18,6 +18,7 @@ pub const Token = lexer.Token;
 pub const Renderer = renders.Renderer;
 pub const Expr = ast.Expr;
 pub const Node = ast.Node;
+pub const Generic = ast.Generic;
 pub const Value = value.Value;
 pub const Str = value.Str;
 pub const Pair = value.Pair;
