@@ -742,7 +742,7 @@ pub const Stream = struct {
                             return self.p.failAt(line, "right bracket must set");
                         }
 
-                        var name_val: ast.ItemName = undefined;
+                        var name_val: ast.ItemName = .none;
                         switch (item.kind) {
                             .name, .string => {
                                 name_val = .{ .text = item.text };
