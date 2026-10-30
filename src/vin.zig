@@ -92,12 +92,12 @@ pub const CompileError = parser.Error;
 pub const RenderError = renders.Error;
 pub const Error = AstError || CompileError || RenderError;
 
-/// Filter/test authoring surface, for `Environment.addFilter`/`addTest`/`addGlobal`/`addMethod`.
 pub const Ctx = args.Ctx;
 pub const Args = args.Args;
 pub const Kwarg = args.Kwarg;
 pub const ArgsError = args.Error;
 
+/// Filter/test authoring surface, for `Environment.addFilter`/`addTest`/`addGlobal`/`addMethod`.
 pub const FilterFn = args.FilterFn;
 pub const TestFn = args.TestFn;
 pub const GlobalFn = args.GlobalFn;

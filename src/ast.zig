@@ -201,8 +201,8 @@ pub const CallBlock = struct {
 };
 
 pub const Generic = struct {
-    ctx: *const anyopaque,
-    renderFn: *const fn (ctx: *const anyopaque, render: *anyopaque) Error![]const Node,
+    ctx: *anyopaque,
+    renderFn: *const fn (ctx: *anyopaque, render: *anyopaque) Error![]const Node,
     line: usize,
 };
 

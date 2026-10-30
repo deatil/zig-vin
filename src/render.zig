@@ -815,7 +815,7 @@ pub const Renderer = struct {
 
     pub fn renderGeneric(self: *Renderer, g: ast.Generic) Error!void {
         const v = g.renderFn(g.ctx, self) catch |err| {
-            return self.fail(g.line, "tag use invalid", .{}, err);
+            return self.fail(g.line, "invalid tag", .{}, err);
         };
         try self.renderNodes(v);
     }

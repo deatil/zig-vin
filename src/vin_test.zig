@@ -612,7 +612,7 @@ fn tag_addstrings_fn(parser: *vin.Parser, rest: []const vin.Token, line: usize, 
     const name = try ts.expect(.name, line, "expected a addstrings name");
     const body = try parser.parseBody(&.{"endaddstrings"});
 
-    const h = TestH{
+    var h = TestH{
         .line = line,
         .name = name.text,
         .data = body.nodes,
@@ -687,7 +687,7 @@ fn tag_addstrings_fn2(parser: *vin.Parser, rest: []const vin.Token, line: usize,
     const name = try ts.expect(.name, line, "expected a addstrings name");
     const body = try parser.parseBody(&.{"endaddstrings"});
 
-    const h = TestH2{
+    var h = TestH2{
         .line = line,
         .name = name.text,
         .data = body.nodes,
@@ -726,7 +726,7 @@ test "Env addTag fail 2" {
     try testing.expectError(error.TemplateSyntaxError, out);
 
     const msg = try alloc.print("{f}", .{diag});
-    try testing.expectEqualStrings("line 1: tag use invalid", msg);
+    try testing.expectEqualStrings("line 1: invalid tag", msg);
 }
 
 test "Value is and to" {
