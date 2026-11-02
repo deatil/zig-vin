@@ -4,13 +4,13 @@ const Writer = std.Io.Writer;
 const Alignment = std.mem.Alignment;
 const Allocator = std.mem.Allocator;
 
-pub const lexer = @import("lexer.zig");
+pub const value = @import("value.zig");
 pub const ast = @import("ast.zig");
+pub const lexer = @import("lexer.zig");
+pub const args = @import("args.zig");
 pub const parser = @import("parser.zig");
 pub const renders = @import("render.zig");
 pub const loaders = @import("loader.zig");
-pub const args = @import("args.zig");
-pub const value = @import("value.zig");
 
 pub const Parser = parser.Parser;
 pub const Stream = parser.Stream;
@@ -116,9 +116,9 @@ pub const Environment = struct {
     filters: std.StringHashMapUnmanaged(FilterFn) = .empty,
     tests: std.StringHashMapUnmanaged(TestFn) = .empty,
     globals: std.StringHashMapUnmanaged(GlobalFn) = .empty,
+    global_values: std.StringHashMapUnmanaged(Value) = .empty,
     methods: std.StringHashMapUnmanaged(MethodFn) = .empty,
     tags: std.StringHashMapUnmanaged(TagFn) = .empty,
-    global_values: std.StringHashMapUnmanaged(Value) = .empty,
     /// Optional; without one, any composition tag is `error.NoLoader`.
     loader: ?Loader = null,
 
@@ -151,6 +151,9 @@ pub const Environment = struct {
         for (defaults.builtin_methods) |e| {
             try env.methods.put(gpa, e.name, e.func);
         }
+        for (defaults.builtin_tags) |e| {
+            try env.tags.put(gpa, e.name, e.func);
+        }
 
         return env;
     }
@@ -159,9 +162,9 @@ pub const Environment = struct {
         self.filters.deinit(self.gpa);
         self.tests.deinit(self.gpa);
         self.globals.deinit(self.gpa);
+        self.global_values.deinit(self.gpa);
         self.methods.deinit(self.gpa);
         self.tags.deinit(self.gpa);
-        self.global_values.deinit(self.gpa);
         self.* = undefined;
     }
 
@@ -190,16 +193,16 @@ pub const Environment = struct {
         try self.globals.put(self.gpa, name, func);
     }
 
+    pub fn addGlobalValue(self: *Environment, name: []const u8, val: Value) error{OutOfMemory}!void {
+        try self.global_values.put(self.gpa, name, val);
+    }
+
     pub fn addMethod(self: *Environment, name: []const u8, func: MethodFn) error{OutOfMemory}!void {
         try self.methods.put(self.gpa, name, func);
     }
 
     pub fn addTag(self: *Environment, name: []const u8, func: TagFn) error{OutOfMemory}!void {
         try self.tags.put(self.gpa, name, func);
-    }
-
-    pub fn addGlobalValue(self: *Environment, name: []const u8, val: Value) error{OutOfMemory}!void {
-        try self.global_values.put(self.gpa, name, val);
     }
 
     pub fn addFunction(self: *Environment, name: []const u8, func: FunctionFn) error{OutOfMemory}!void {
@@ -218,16 +221,16 @@ pub const Environment = struct {
         return self.globals.remove(name);
     }
 
+    pub fn banGlobalValue(self: *Environment, name: []const u8) bool {
+        return self.global_values.remove(name);
+    }
+
     pub fn banMethod(self: *Environment, name: []const u8) bool {
         return self.methods.remove(name);
     }
 
     pub fn banTag(self: *Environment, name: []const u8) bool {
         return self.tags.remove(name);
-    }
-
-    pub fn banGlobalValue(self: *Environment, name: []const u8) bool {
-        return self.global_values.remove(name);
     }
 
     /// Parse `source` into a reusable `Template`. The template copies the
@@ -328,6 +331,11 @@ pub const Environment = struct {
         return self.globals.contains(name);
     }
 
+    fn hasGlobalValueThunk(ctx: *const anyopaque, name: []const u8) bool {
+        const self: *const Environment = @ptrCast(@alignCast(ctx));
+        return self.global_values.contains(name);
+    }
+
     fn hasMethodThunk(ctx: *const anyopaque, name: []const u8) bool {
         const self: *const Environment = @ptrCast(@alignCast(ctx));
         return self.methods.contains(name);
@@ -336,11 +344,6 @@ pub const Environment = struct {
     fn hasTagThunk(ctx: *const anyopaque, name: []const u8) bool {
         const self: *const Environment = @ptrCast(@alignCast(ctx));
         return self.tags.contains(name);
-    }
-
-    fn hasGlobalValueThunk(ctx: *const anyopaque, name: []const u8) bool {
-        const self: *const Environment = @ptrCast(@alignCast(ctx));
-        return self.global_values.contains(name);
     }
 
     fn filterLookup(ctx: *const anyopaque, name: []const u8) ?FilterFn {
@@ -358,6 +361,11 @@ pub const Environment = struct {
         return self.globals.get(name);
     }
 
+    fn globalValueLookup(ctx: *const anyopaque, name: []const u8) ?Value {
+        const self: *const Environment = @ptrCast(@alignCast(ctx));
+        return self.global_values.get(name);
+    }
+
     fn methodLookup(ctx: *const anyopaque, name: []const u8) ?MethodFn {
         const self: *const Environment = @ptrCast(@alignCast(ctx));
         return self.methods.get(name);
@@ -366,11 +374,6 @@ pub const Environment = struct {
     fn tagLookup(ctx: *const anyopaque, name: []const u8) ?TagFn {
         const self: *const Environment = @ptrCast(@alignCast(ctx));
         return self.tags.get(name);
-    }
-
-    fn globalValueLookup(ctx: *const anyopaque, name: []const u8) ?Value {
-        const self: *const Environment = @ptrCast(@alignCast(ctx));
-        return self.global_values.get(name);
     }
 
     /// Compiles a *loaded* template into the render arena. Loaded templates go

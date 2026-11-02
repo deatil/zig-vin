@@ -3,13 +3,17 @@ const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
 
 const value = @import("value.zig");
+const ast = @import("ast.zig");
 const args_mod = @import("args.zig");
+const lexer = @import("lexer.zig");
+const parsers = @import("parser.zig");
 const renders = @import("render.zig");
 
 const FilterEntry = struct { name: []const u8, func: args_mod.FilterFn };
 const TestEntry = struct { name: []const u8, func: args_mod.TestFn };
 const GlobalEntry = struct { name: []const u8, func: args_mod.GlobalFn };
 const MethodEntry = struct { name: []const u8, func: args_mod.MethodFn };
+const TagEntry = struct { name: []const u8, func: parsers.TagFn };
 
 const Ctx = args_mod.Ctx;
 const Args = args_mod.Args;
@@ -1753,4 +1757,115 @@ pub const builtin_methods = [_]MethodEntry{
     .{ .name = "isalpha", .func = mIsalpha },
     .{ .name = "removeprefix", .func = mRemoveprefix },
     .{ .name = "removesuffix", .func = mRemovesuffix },
+};
+
+// =======
+
+const IncrementCtx = struct {
+    name: []const u8,
+
+    fn renderFn(ctx: *const anyopaque, render: *anyopaque) ast.Error![]const ast.Node {
+        const self: *const IncrementCtx = @ptrCast(@alignCast(ctx));
+        var r: *renders.Renderer = @ptrCast(@alignCast(render));
+
+        const ctx_name = r.arena.print("__vin_increment_{s}", .{self.name}) catch return error.TemplateSyntaxError;
+        
+        var next: Value = undefined;
+        if (r.context_values.get(ctx_name)) |old| {
+            if (old == .integer) {
+                next = Value.fromInt(old.integer + 1);
+            } else {
+                next = Value.fromInt(0);
+            }
+        } else {
+            next = Value.fromInt(0);
+        }
+
+        r.context_values.put(r.arena, ctx_name, next) catch return error.TemplateSyntaxError;
+        r.emit(next, 0) catch return error.TemplateSyntaxError;
+
+        return &.{};
+    }
+};
+
+fn tagIncrementFn(
+    parser: *parsers.Parser,
+    rest: []const lexer.Token,
+    line: usize,
+    out: *std.ArrayList(ast.Node),
+) parsers.Error!void {
+    var ts: parsers.Stream = .{ .toks = rest, .p = parser };
+    const name = try ts.expect(.name, line, "expected a variable name");
+    try ts.expectEnd(line);
+
+    const ctx = try parser.arena.create(IncrementCtx);
+    ctx.* = .{
+        .name = name.text,
+    };
+
+    const def = try parser.arena.create(ast.Generic);
+    def.* = .{
+        .ctx = ctx,
+        .renderFn = IncrementCtx.renderFn,
+        .line = line,
+    };
+
+    try out.append(parser.arena, .{ .generic = def.* });
+}
+
+const DecrementCtx = struct {
+    name: []const u8,
+
+    fn renderFn(ctx: *const anyopaque, render: *anyopaque) ast.Error![]const ast.Node {
+        const self: *const DecrementCtx = @ptrCast(@alignCast(ctx));
+        var r: *renders.Renderer = @ptrCast(@alignCast(render));
+
+        const ctx_name = r.arena.print("__vin_decrement_{s}", .{self.name}) catch return error.TemplateSyntaxError;
+
+        var next: Value = undefined;
+        if (r.context_values.get(ctx_name)) |old| {
+            if (old == .integer) {
+                next = Value.fromInt(old.integer - 1);
+            } else {
+                next = Value.fromInt(-1);
+            }
+        } else {
+            next = Value.fromInt(-1);
+        }
+
+        r.context_values.put(r.arena, ctx_name, next) catch return error.TemplateSyntaxError;
+        r.emit(next, 0) catch return error.TemplateSyntaxError;
+
+        return &.{};
+    }
+};
+
+fn tagDecrementFn(
+    parser: *parsers.Parser,
+    rest: []const lexer.Token,
+    line: usize,
+    out: *std.ArrayList(ast.Node),
+) parsers.Error!void {
+    var ts: parsers.Stream = .{ .toks = rest, .p = parser };
+    const name = try ts.expect(.name, line, "expected a variable name");
+    try ts.expectEnd(line);
+
+    const ctx = try parser.arena.create(DecrementCtx);
+    ctx.* = .{
+        .name = name.text,
+    };
+
+    const def = try parser.arena.create(ast.Generic);
+    def.* = .{
+        .ctx = ctx,
+        .renderFn = DecrementCtx.renderFn,
+        .line = line,
+    };
+
+    try out.append(parser.arena, .{ .generic = def.* });
+}
+
+pub const builtin_tags = [_]TagEntry{
+    .{ .name = "increment", .func = tagIncrementFn },
+    .{ .name = "decrement", .func = tagDecrementFn },
 };

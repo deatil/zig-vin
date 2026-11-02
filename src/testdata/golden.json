@@ -5247,6 +5247,34 @@
    "trim_blocks": true
   },
   {
+    "autoescape": false,
+    "context": "{\"l\": [1,2,3]}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "for_increment",
+    "out": "0,1,2,3",
+    "status": "ok",
+    "strict": false,
+    "template": "{% for x in l %}{% increment ity_index %},{% endfor %}{% increment ity_index %}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
+    "context": "{\"l\": [1,2,3]}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "for_decrement",
+    "out": "-1,-2,-3,-4",
+    "status": "ok",
+    "strict": false,
+    "template": "{% for x in l %}{% decrement ity_index %},{% endfor %}{% decrement ity_index %}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
    "autoescape": false,
    "context": "{\"name\": \"a\\\"b\", \"tags\": [\"x\", \"y\"]}",
    "expect_error": false,

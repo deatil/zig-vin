@@ -224,6 +224,8 @@ pub const Renderer = struct {
     /// True while an `{% import %}`ed template runs, so macros defined there
     /// do not capture the importing render's context.
     in_module: bool = false,
+    /// for set context value
+    context_values: std.StringHashMapUnmanaged(Value) = .empty,
 
     pub fn fail(self: *Renderer, line: usize, comptime fmt: []const u8, args: anytype, e: Error) Error {
         self.diag.set(line, fmt, args);
