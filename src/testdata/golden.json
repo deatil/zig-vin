@@ -1702,6 +1702,20 @@
    "trim_blocks": false
   },
   {
+    "autoescape": false,
+    "context": "{\"n\": 3}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "unless_elif_else",
+    "out": "big",
+    "status": "ok",
+    "strict": false,
+    "template": "{% unless n > 5 %}big{% elif n > 2 %}mid{% else %}small{% endunless %}",
+    "templates": {},
+    "trim_blocks": false
+   },
+  {
    "autoescape": false,
    "context": "{}",
    "expect_error": false,
@@ -2051,6 +2065,62 @@
    "template": "{% set x = 1 %}{% if true %}{% set x = 2 %}{% endif %}{{ x }}",
    "templates": {},
    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
+    "context": "{}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "set_case_when",
+    "out": "admin",
+    "status": "ok",
+    "strict": false,
+    "template": "{% set x = 'admin' %}{% case x %}{% when 'admin' %}admin{% when 'editor', 'writer' %}editor/writer{% else %}guest{% endcase %}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
+    "context": "{}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "set_case_when_2",
+    "out": "editor/writer",
+    "status": "ok",
+    "strict": false,
+    "template": "{% set x = 'editor' %}{% case x %}{% when 'admin' %}admin{% when 'editor', 'writer' %}editor/writer{% else %}guest{% endcase %}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
+    "context": "{}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "set_case_when_3",
+    "out": "editor/writer",
+    "status": "ok",
+    "strict": false,
+    "template": "{% set x = 'writer' %}{% case x %}{% when 'admin' %}admin{% when 'editor', 'writer' %}editor/writer{% else %}guest{% endcase %}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
+    "context": "{}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "set_case_when_31",
+    "out": "guest",
+    "status": "ok",
+    "strict": false,
+    "template": "{% set x = 'writer1' %}{% case x %}{% when 'admin' %}admin{% when 'editor', 'writer' %}editor/writer{% else %}guest{% endcase %}",
+    "templates": {},
+    "trim_blocks": false
   },
   {
    "autoescape": false,

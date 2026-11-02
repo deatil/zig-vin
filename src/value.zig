@@ -1007,6 +1007,7 @@ pub fn valueEql(a: Value, b: Value) bool {
         if (a != .float and b != .float) return asInt(a).? == asInt(b).?;
         return asFloat(a).? == asFloat(b).?;
     }
+
     return switch (a) {
         .none => b == .none,
         .string => |s| b == .string and std.mem.eql(u8, s.bytes, b.string.bytes),

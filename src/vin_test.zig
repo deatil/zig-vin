@@ -1109,6 +1109,14 @@ test "env bans" {
         try testing.expectEqual(true, env.banTag("test_tags"));
         try testing.expectEqual(false, env.tags.contains("test_tags"));
     }
+
+    {
+        try testing.expectEqual(false, env.global_values.contains("test_values"));
+        try env.addGlobalValue("test_values", .fromString("uuuu"));
+        try testing.expectEqual(true, env.global_values.contains("test_values"));
+        try testing.expectEqual(true, env.banGlobalValue("test_values"));
+        try testing.expectEqual(false, env.global_values.contains("test_values"));
+    }
 }
 
 const TestCaller = struct {
@@ -1374,4 +1382,32 @@ test "env range fail" {
 
     const msg = try alloc.print("{f}", .{diag});
     try testing.expectEqualStrings("line 1: range() args invalid length", msg);
+}
+
+test "env addGlobalValue" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var ba: TestCaller = .{};
+    const val: vin.Value = .fromCallable(.{
+        .ctx = &ba,
+        .call = TestCaller.test_fn,
+    });
+
+    try env.addGlobalValue("tests", .fromString("test-vv"));
+    try env.addGlobalValue("call_val", val);
+
+    var tpl = try env.compile("<>{{ tests }}|{{ data }}|{{ call_val('opikl') }}", null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .data = "yyy",
+    });
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("<>test-vv|yyy|opikl", out);
 }

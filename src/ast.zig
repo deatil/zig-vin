@@ -85,6 +85,18 @@ pub const If = struct {
     orelse_: []const Node,
 };
 
+pub const CaseWhen = struct {
+    values: []const *const Expr,
+    body: []const Node,
+};
+
+pub const Case = struct {
+    expr: *const Expr,
+    branches: []const CaseWhen,
+    else_body: []const Node,
+    line: usize,
+};
+
 pub const For = struct {
     target: Target,
     iterable: *const Expr,
@@ -210,6 +222,7 @@ pub const Node = union(enum) {
     text: []const u8,
     output: struct { expr: *const Expr, line: usize },
     if_: If,
+    case_: Case,
     for_: For,
     continue_: Continue,
     break_: Break,

@@ -55,6 +55,7 @@ pub const Registry = struct {
     hasGlobal: *const fn (ctx: *const anyopaque, name: []const u8) bool,
     hasMethod: *const fn (ctx: *const anyopaque, name: []const u8) bool,
     hasTag: *const fn (ctx: *const anyopaque, name: []const u8) bool,
+    hasGlobalValue: *const fn (ctx: *const anyopaque, name: []const u8) bool,
     tag: *const fn (ctx: *const anyopaque, name: []const u8) ?TagFn,
 };
 
@@ -192,6 +193,8 @@ pub const Parser = struct {
         }
 
         if (std.mem.eql(u8, kw.text, "if")) return self.parseIf(rest, line, out);
+        if (std.mem.eql(u8, kw.text, "unless")) return self.parseUnless(rest, line, out);
+        if (std.mem.eql(u8, kw.text, "case")) return self.parseCase(rest, line, out);
         if (std.mem.eql(u8, kw.text, "for")) return self.parseFor(rest, line, out);
         if (std.mem.eql(u8, kw.text, "continue")) return self.parseContinue(rest, line, out);
         if (std.mem.eql(u8, kw.text, "break")) return self.parseBreak(rest, line, out);
@@ -237,10 +240,12 @@ pub const Parser = struct {
         if (std.mem.eql(u8, body.ended_with, "endif")) {
             return .{ .if_ = .{ .cond = cond, .body = body.nodes, .orelse_ = &.{} } };
         }
+
         if (std.mem.eql(u8, body.ended_with, "else")) {
             const else_body = try self.parseBody(&.{"endif"});
             return .{ .if_ = .{ .cond = cond, .body = body.nodes, .orelse_ = else_body.nodes } };
         }
+
         // elif
         var ts: Stream = .{ .toks = body.end_toks, .p = self };
         const sub_cond = try ts.parseExpression(body.end_line, true);
@@ -249,6 +254,105 @@ pub const Parser = struct {
         const chain = try self.arena.alloc(Node, 1);
         chain[0] = nested;
         return .{ .if_ = .{ .cond = cond, .body = body.nodes, .orelse_ = chain } };
+    }
+
+    fn parseUnless(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+        var ts: Stream = .{ .toks = rest, .p = self };
+        const cond = try ts.parseExpression(line, true);
+        try ts.expectEnd(line);
+        const node = try self.parseUnlessTail(cond);
+        try out.append(self.arena, node);
+    }
+
+    fn parseUnlessTail(self: *Parser, cond: *const Expr) Error!Node {
+        try self.nest(0);
+        defer self.unnest();
+
+        const negated = try self.dupe(.{ .not = cond });
+        const body = try self.parseBody(&.{ "elif", "else", "endunless" });
+
+        if (std.mem.eql(u8, body.ended_with, "endunless")) {
+            return .{ .if_ = .{ .cond = negated, .body = body.nodes, .orelse_ = &.{} } };
+        }
+
+        if (std.mem.eql(u8, body.ended_with, "else")) {
+            const else_body = try self.parseBody(&.{"endunless"});
+            return .{ .if_ = .{
+                .cond = negated,
+                .body = body.nodes,
+                .orelse_ = else_body.nodes,
+            } };
+        }
+
+        // {% elif ... %} inside unless
+        var ts: Stream = .{ .toks = body.end_toks, .p = self };
+        const sub_cond = try ts.parseExpression(body.end_line, true);
+        try ts.expectEnd(body.end_line);
+
+        const nested = try self.parseUnlessTail(sub_cond);
+        const chain = try self.arena.alloc(Node, 1);
+        chain[0] = nested;
+
+        return .{ .if_ = .{
+            .cond = negated,
+            .body = body.nodes,
+            .orelse_ = chain,
+        } };
+    }
+
+    fn parseCase(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+        var ts: Stream = .{ .toks = rest, .p = self };
+        const expr = try ts.parseExpression(line, true);
+        try ts.expectEnd(line);
+
+        var branches: std.ArrayList(ast.CaseWhen) = .empty;
+        var else_body: []const Node = &.{};
+
+        var state = try self.parseBody(&.{ "when", "else", "endcase" });
+
+        while (true) {
+            if (std.mem.eql(u8, state.ended_with, "when")) {
+                var values_ts: Stream = .{ .toks = state.end_toks, .p = self };
+                var values: std.ArrayList(*const Expr) = .empty;
+
+                while (values_ts.peek() != null) {
+                    try values.append(self.arena, try values_ts.parseExpression(state.end_line, true));
+                    if (!values_ts.eat(.comma)) break;
+                }
+                try values_ts.expectEnd(state.end_line);
+
+                const branch_body = try self.parseBody(&.{ "when", "else", "endcase" });
+                try branches.append(self.arena, .{
+                    .values = values.items,
+                    .body = branch_body.nodes,
+                });
+                state = branch_body;
+                continue;
+            }
+
+            if (std.mem.eql(u8, state.ended_with, "else")) {
+                const else_state = try self.parseBody(&.{"endcase"});
+                else_body = else_state.nodes;
+                break;
+            }
+
+            if (std.mem.eql(u8, state.ended_with, "endcase")) {
+                break;
+            }
+
+            if (state.ended_with.len == 0) break;
+
+            return self.failAt(line, "expected `when`, `else`, or `endcase` in case-tag");
+        }
+
+        try out.append(self.arena, .{
+            .case_ = .{
+                .expr = expr,
+                .branches = branches.items,
+                .else_body = else_body,
+                .line = line,
+            },
+        });
     }
 
     fn parseFor(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
@@ -535,14 +639,6 @@ pub const Parser = struct {
     }
 };
 
-// ── static "does this body mention that name?" ──────────────────────────────
-//
-// The reference decides at COMPILE time whether a macro accepts extra
-// positional or keyword arguments — a macro whose body never says `varargs`
-// rejects a third argument outright. Reproducing that means the same question
-// has to be answered here, by walking the body rather than by watching what
-// happens at call time.
-
 pub fn mentionsName(nodes: []const Node, name: []const u8) bool {
     for (nodes) |n| if (nodeMentions(n, name)) return true;
     return false;
@@ -554,6 +650,13 @@ pub fn nodeMentions(n: Node, name: []const u8) bool {
         .output => |o| exprMentions(o.expr, name),
         .do => |d| exprMentions(d.expr, name),
         .if_ => |b| exprMentions(b.cond, name) or mentionsName(b.body, name) or mentionsName(b.orelse_, name),
+        .case_ => |b| blk: {
+            for (b.branches) |a| {
+                if (mentionsName(a.body, name)) break :blk true;
+                for (a.values) |v| if (exprMentions(v, name)) break :blk true;
+            }
+            break :blk (exprMentions(b.expr, name) or mentionsName(b.else_body, name));
+        },
         .for_ => |f| exprMentions(f.iterable, name) or
             (f.cond != null and exprMentions(f.cond.?, name)) or
             mentionsName(f.body, name) or mentionsName(f.empty, name),

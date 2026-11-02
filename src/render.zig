@@ -84,6 +84,7 @@ pub const Lookup = struct {
     test_fn: *const fn (ctx: *const anyopaque, name: []const u8) ?args_mod.TestFn,
     global: *const fn (ctx: *const anyopaque, name: []const u8) ?args_mod.GlobalFn,
     method: *const fn (ctx: *const anyopaque, name: []const u8) ?args_mod.MethodFn,
+    global_value: *const fn (ctx: *const anyopaque, name: []const u8) ?Value,
     /// Where `{% extends %}`/`{% include %}`/`{% import %}` get their bytes.
     /// `null` makes every composition tag `error.NoLoader` — a template that
     /// names another template on an environment with no loader is a mistake
@@ -253,14 +254,22 @@ pub const Renderer = struct {
             i -= 1;
             if (self.frames.items[i].get(name)) |v| return v;
         }
+
         switch (self.context) {
             .map => |m| if (m.get(name)) |v| return v,
             .namespace => |ns| if (ns.get(name)) |v| return v,
             else => {},
         }
+
+        // Get setting global value
+        if (self.lookup.global_value(self.lookup.ctx, name)) |v| {
+            return v;
+        }
+
         if (std.mem.eql(u8, name, "self")) {
             if (self.selfObject()) |ns| return .{ .namespace = ns } else |_| {}
         }
+
         return .{ .undef = .{ .name = name } };
     }
 
@@ -300,6 +309,7 @@ pub const Renderer = struct {
             .if_ => |b| {
                 if (try self.truthy(b.cond, 0)) try self.renderNodes(b.body) else try self.renderNodes(b.orelse_);
             },
+            .case_ => |c| try self.renderCase(c),
             .for_ => |f| try self.renderFor(f),
             .continue_ => |c| {
                 if (self.loop_depth == 0) {
@@ -818,6 +828,24 @@ pub const Renderer = struct {
             return self.fail(g.line, "invalid tag", .{}, err);
         };
         try self.renderNodes(v);
+    }
+
+    pub fn renderCase(self: *Renderer, c: ast.Case) Error!void {
+        const target = try self.eval(c.expr, c.line);
+
+        for (c.branches) |branch| {
+            for (branch.values) |value_expr| {
+                const v = try self.eval(value_expr, c.line);
+                if (value.valueEql(target, v)) {
+                    try self.renderNodes(branch.body);
+                    return;
+                }
+            }
+        }
+
+        if (c.else_body.len != 0) {
+            try self.renderNodes(c.else_body);
+        }
     }
 
     pub fn renderFor(self: *Renderer, f: ast.For) Error!void {

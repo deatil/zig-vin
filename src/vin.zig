@@ -97,7 +97,6 @@ pub const Args = args.Args;
 pub const Kwarg = args.Kwarg;
 pub const ArgsError = args.Error;
 
-/// Filter/test authoring surface, for `Environment.addFilter`/`addTest`/`addGlobal`/`addMethod`.
 pub const FilterFn = args.FilterFn;
 pub const TestFn = args.TestFn;
 pub const GlobalFn = args.GlobalFn;
@@ -118,6 +117,7 @@ pub const Environment = struct {
     globals: std.StringHashMapUnmanaged(GlobalFn) = .empty,
     methods: std.StringHashMapUnmanaged(MethodFn) = .empty,
     tags: std.StringHashMapUnmanaged(TagFn) = .empty,
+    global_values: std.StringHashMapUnmanaged(Value) = .empty,
     /// Optional; without one, any composition tag is `error.NoLoader`.
     loader: ?Loader = null,
 
@@ -160,6 +160,7 @@ pub const Environment = struct {
         self.globals.deinit(self.gpa);
         self.methods.deinit(self.gpa);
         self.tags.deinit(self.gpa);
+        self.global_values.deinit(self.gpa);
         self.* = undefined;
     }
 
@@ -196,6 +197,10 @@ pub const Environment = struct {
         try self.tags.put(self.gpa, name, func);
     }
 
+    pub fn addGlobalValue(self: *Environment, name: []const u8, val: Value) error{OutOfMemory}!void {
+        try self.global_values.put(self.gpa, name, val);
+    }
+
     pub fn banFilter(self: *Environment, name: []const u8) bool {
         return self.filters.remove(name);
     }
@@ -214,6 +219,10 @@ pub const Environment = struct {
 
     pub fn banTag(self: *Environment, name: []const u8) bool {
         return self.tags.remove(name);
+    }
+
+    pub fn banGlobalValue(self: *Environment, name: []const u8) bool {
+        return self.global_values.remove(name);
     }
 
     /// Parse `source` into a reusable `Template`. The template copies the
@@ -246,6 +255,7 @@ pub const Environment = struct {
             .hasGlobal = hasGlobalThunk,
             .hasMethod = hasMethodThunk,
             .hasTag = hasTagThunk,
+            .hasGlobalValue = hasGlobalValueThunk,
             .tag = tagLookup,
         }, .{ .max_nesting_depth = self.options.max_nesting_depth }, d);
 
@@ -323,6 +333,11 @@ pub const Environment = struct {
         return self.tags.contains(name);
     }
 
+    fn hasGlobalValueThunk(ctx: *const anyopaque, name: []const u8) bool {
+        const self: *const Environment = @ptrCast(@alignCast(ctx));
+        return self.global_values.contains(name);
+    }
+
     fn filterLookup(ctx: *const anyopaque, name: []const u8) ?FilterFn {
         const self: *const Environment = @ptrCast(@alignCast(ctx));
         return self.filters.get(name);
@@ -346,6 +361,11 @@ pub const Environment = struct {
     fn tagLookup(ctx: *const anyopaque, name: []const u8) ?TagFn {
         const self: *const Environment = @ptrCast(@alignCast(ctx));
         return self.tags.get(name);
+    }
+
+    fn globalValueLookup(ctx: *const anyopaque, name: []const u8) ?Value {
+        const self: *const Environment = @ptrCast(@alignCast(ctx));
+        return self.global_values.get(name);
     }
 
     /// Compiles a *loaded* template into the render arena. Loaded templates go
@@ -373,6 +393,7 @@ pub const Environment = struct {
             .hasGlobal = hasGlobalThunk,
             .hasMethod = hasMethodThunk,
             .hasTag = hasTagThunk,
+            .hasGlobalValue = hasGlobalValueThunk,
             .tag = tagLookup,
         }, .{ .max_nesting_depth = self.options.max_nesting_depth }, diag);
     }
@@ -440,6 +461,7 @@ pub const Template = struct {
             .test_fn = Environment.testLookup,
             .global = Environment.globalLookup,
             .method = Environment.methodLookup,
+            .global_value = Environment.globalValueLookup,
             .loader = self.env.loader,
             .compile = Environment.compileInto,
         }, out, d) catch |e| {
