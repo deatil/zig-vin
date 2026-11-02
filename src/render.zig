@@ -1235,6 +1235,12 @@ pub const Renderer = struct {
                     };
                 }
             }
+            if (bound == .caller) {
+                var ctx = self.filterCtx();
+                return bound.caller.call(&ctx, args) catch |err| {
+                    return self.fail(c.line, "'{s}' function caller fail", .{name}, err);
+                };
+            }
 
             if (std.mem.eql(u8, name, "loop")) return self.recurseLoop(args, c.line);
             if (std.mem.eql(u8, name, "range")) return self.globalRange(args, c.line);

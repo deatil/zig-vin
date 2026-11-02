@@ -1157,6 +1157,41 @@ test "value caller" {
     try testing.expectEqualStrings("<>test-data", out);
 }
 
+fn test_caller_fn(ctx: *vin.Ctx, args: vin.Args) vin.ArgsError!vin.Value {
+    _ = ctx;
+
+    const name_val = args.get(0, "name") orelse return error.BadArgument;
+    const n = name_val.toStrings() orelse "";
+    return .fromString(n);
+}
+
+test "value caller 2" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    try env.addFunction("data", test_caller_fn);
+
+    var tpl = try env.compile("<>{{ data('test-data') }}|{{ data2('test-nnn') }}", null);
+    defer tpl.deinit();
+
+    const val: vin.Value = .fromCaller(.{
+        .call = test_caller_fn,
+    });
+
+    try testing.expectEqual(true, val.isCaller());
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .data2 = val,
+    });
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("<>test-data|test-nnn", out);
+}
+
 test "value caller fail" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();

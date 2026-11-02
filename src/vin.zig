@@ -101,6 +101,7 @@ pub const FilterFn = args.FilterFn;
 pub const TestFn = args.TestFn;
 pub const GlobalFn = args.GlobalFn;
 pub const MethodFn = args.MethodFn;
+pub const FunctionFn = args.FunctionFn;
 pub const TagFn = parser.TagFn;
 
 const defaults = @import("defaults.zig");
@@ -199,6 +200,10 @@ pub const Environment = struct {
 
     pub fn addGlobalValue(self: *Environment, name: []const u8, val: Value) error{OutOfMemory}!void {
         try self.global_values.put(self.gpa, name, val);
+    }
+
+    pub fn addFunction(self: *Environment, name: []const u8, func: FunctionFn) error{OutOfMemory}!void {
+        try self.addGlobalValue(name, .{ .caller = .{ .call = func } });
     }
 
     pub fn banFilter(self: *Environment, name: []const u8) bool {

@@ -54,6 +54,7 @@ pub const FilterFn = *const fn (ctx: *Ctx, input: Value, args: Args) Error!Value
 pub const TestFn = *const fn (ctx: *Ctx, input: Value, args: Args) Error!bool;
 pub const GlobalFn = *const fn (ctx: *Ctx, args: Args) Error!Value;
 pub const MethodFn = *const fn (ctx: *Ctx, input: Value, args: Args) Error!Value;
+pub const FunctionFn = *const fn (ctx: *Ctx, args: Args) Error!Value;
 
 /// A float in a position that needs an integer. The reference refuses one
 /// outright here (`range(1e300)` → `TypeError`); this module is deliberately

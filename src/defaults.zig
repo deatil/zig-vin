@@ -1072,7 +1072,7 @@ fn jsonWrite(ctx: *Ctx, w: *Writer, v: Value, indent: ?usize, depth: usize) Erro
             if (pairs.len != 0 and indent != null) try jsonSep(w, indent, depth, true);
             w.writeAll("}") catch return error.OutOfMemory;
         },
-        .loop, .macro, .callable => return error.BadArgument,
+        .loop, .macro, .callable, .caller => return error.BadArgument,
     }
 }
 
