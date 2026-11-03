@@ -418,8 +418,6 @@ fn fXmlattr(ctx: *Ctx, input: Value, args: Args) Error!Value {
     return .{ .string = .{ .bytes = out.items, .safe = true } };
 }
 
-// ── numeric args_mod ─────────────────────────────────────────────────────────
-
 fn fAbs(ctx: *Ctx, input: Value, args: Args) Error!Value {
     _ = ctx;
     _ = args;
@@ -652,7 +650,7 @@ fn fSum(ctx: *Ctx, input: Value, args: Args) Error!Value {
     return acc;
 }
 
-// ── sequence args_mod ────────────────────────────────────────────────────────
+// filter
 
 fn fLength(ctx: *Ctx, input: Value, args: Args) Error!Value {
     _ = ctx;
@@ -1260,7 +1258,7 @@ pub const builtin_filters = [_]FilterEntry{
     .{ .name = "filesizeformat", .func = fFilesizeformat },
 };
 
-// ── tests ────────────────────────────────────────────────────────────────
+// tests 
 
 fn tDefined(ctx: *Ctx, input: Value, args: Args) Error!bool {
     _ = ctx;
@@ -1535,7 +1533,7 @@ pub const builtin_globals = [_]GlobalEntry{
     .{ .name = "namespace", .func = gNamespace },
 };
 
-// ── value methods (`s.upper()`, `d.items()`, …) ─────────────────────────────
+// value methods (`s.upper()`, `d.items()`, …) 
 
 fn stringMethod(ctx: *Ctx, input: Value, name: []const u8, args: Args) Error!Value {
     if (input != .string) {

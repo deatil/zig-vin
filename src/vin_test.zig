@@ -1446,3 +1446,122 @@ test "env addGlobalValue" {
 
     try testing.expectEqualStrings("<>test-vv|yyy|opikl", out);
 }
+
+test "render with data" {
+    const alloc = testing.allocator;
+
+    var arena: std.heap.ArenaAllocator = .init(alloc);
+    defer arena.deinit();
+
+    const a = arena.allocator();
+
+    var map: *vin.MapLoader = try .create(a, &.{
+        .{ .name = "base3", .source = @embedFile("testdata/views/base3.htm") },
+        .{ .name = "renders/tpl", .source = @embedFile("testdata/views/renders/tpl.htm") },
+        .{ .name = "renders/tpl2", .source = @embedFile("testdata/views/renders/tpl2.htm") },
+        .{ .name = "renders/tpl3", .source = @embedFile("testdata/views/renders/tpl3.htm") },
+        .{ .name = "renders/tpl31", .source = @embedFile("testdata/views/renders/tpl31.htm") },
+        .{ .name = "renders/base1", .source = @embedFile("testdata/views/renders/base1.htm") },
+        .{ .name = "renders/base2", .source = @embedFile("testdata/views/renders/base2.htm") },
+        .{ .name = "renders/tpl5", .source = @embedFile("testdata/views/renders/tpl5.htm") },
+        .{ .name = "renders/tpl6", .source = @embedFile("testdata/views/renders/tpl6.htm") },
+    });
+
+    var env = try vin.Environment.initWithLoader(a, .{}, map.loader());
+    defer env.deinit();
+
+    {
+        const ctx = try vin.valueFrom(a, .{
+            .name = "test-name",
+        });
+        const out = try env.renderTemplateAlloc("renders/tpl", ctx, null);
+        defer a.free(out);
+        try testing.expectEqualStrings("tpl, test-name=base, Admin|name: test-name=base2, name: test-name", out);
+    }
+    {
+        const ctx = try vin.valueFrom(a, .{
+            .name = "test-name",
+        });
+
+        var diag: vin.Diagnostic = undefined;
+
+        const out = env.renderTemplateAlloc("renders/tpl3", ctx, &diag);
+
+        try testing.expectError(error.UndefinedValue, out);
+
+        const msg = try a.print("{f}", .{diag});
+        try testing.expectEqualStrings("line 1: in template 'base3': 'name1' is undefined", msg);
+    }
+    {
+        const ctx = try vin.valueFrom(a, .{
+            .name1 = "test-name",
+        });
+
+        var diag: vin.Diagnostic = undefined;
+
+        const out = env.renderTemplateAlloc("renders/tpl31", ctx, &diag);
+
+        try testing.expectError(error.UndefinedValue, out);
+
+        const msg = try a.print("{f}", .{diag});
+        try testing.expectEqualStrings("line 1: in template 'renders/tpl2': 'name' is undefined", msg);
+    }
+
+    {
+        const ctx = try vin.valueFrom(a, .{
+            .name1 = "test-name",
+        });
+
+        var diag: vin.Diagnostic = undefined;
+
+        const out = env.renderTemplateAlloc("renders/tpl5", ctx, &diag);
+
+        try testing.expectError(error.UndefinedValue, out);
+
+        const msg = try a.print("{f}", .{diag});
+        try testing.expectEqualStrings("line 5: 'name2' is undefined", msg);
+    }
+    {
+        const ctx = try vin.valueFrom(a, .{
+            .name2 = "test-name",
+        });
+
+        var diag: vin.Diagnostic = undefined;
+
+        const out = env.renderTemplateAlloc("renders/tpl5", ctx, &diag);
+
+        try testing.expectError(error.UndefinedValue, out);
+
+        const msg = try a.print("{f}", .{diag});
+        try testing.expectEqualStrings("line 3: 'name1' is undefined", msg);
+    }
+
+    {
+        const ctx = try vin.valueFrom(a, .{
+            .name1 = "test-name",
+        });
+
+        var diag: vin.Diagnostic = undefined;
+
+        const out = env.renderTemplateAlloc("renders/tpl6", ctx, &diag);
+
+        try testing.expectError(error.UndefinedValue, out);
+
+        const msg = try a.print("{f}", .{diag});
+        try testing.expectEqualStrings("line 6: 'name2' is undefined", msg);
+    }
+    {
+        const ctx = try vin.valueFrom(a, .{
+            .name2 = "test-name",
+        });
+
+        var diag: vin.Diagnostic = undefined;
+
+        const out = env.renderTemplateAlloc("renders/tpl6", ctx, &diag);
+
+        try testing.expectError(error.UndefinedValue, out);
+
+        const msg = try a.print("{f}", .{diag});
+        try testing.expectEqualStrings("line 7: 'name1' is undefined", msg);
+    }
+}

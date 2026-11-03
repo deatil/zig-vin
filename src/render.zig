@@ -232,6 +232,11 @@ pub const Renderer = struct {
         return e;
     }
 
+    pub fn failInTemplate(self: *Renderer, template_name: []const u8, err: Error) Error {
+        const msg = try self.arena.print("{s}", .{self.diag.message()});
+        return self.fail(self.diag.line, "in template '{s}': {s}", .{ template_name, msg }, err);
+    }
+
     pub fn newFrame(self: *Renderer) Error!*Frame {
         const f = try self.arena.create(Frame);
         f.* = .empty;
@@ -289,8 +294,6 @@ pub const Renderer = struct {
         try list.append(self.arena, try self.newFrame());
         return list;
     }
-
-    // ── nodes ───────────────────────────────────────────────────────────────
 
     pub fn renderNodes(self: *Renderer, nodes: []const Node) Error!void {
         for (nodes) |n| try self.renderNode(n);
@@ -369,8 +372,6 @@ pub const Renderer = struct {
                 try self.renderNodes(wth.body);
             },
             .do => |d| _ = try self.eval(d.expr, d.line),
-
-            // ── composition ────────────────────────────────────────────────
             .extends => |e| {
                 // Only ever reached inside a prelude pass; `renderUnit` has
                 // already decided the template extends something, and the name
@@ -395,13 +396,12 @@ pub const Renderer = struct {
                     try self.define(alias.as, ns.get(alias.name) orelse .{ .undef = .{ .name = alias.name } });
                 }
             },
+            .render => |r| try self.renderRender(r),
             .macro => |m| try self.define(m.def.name, try self.makeMacro(m.def, null)),
             .call_block => |c| try self.renderCallBlock(c),
             .generic => |g| try self.renderGeneric(g),
         }
     }
-
-    // ── templates: loading, the inheritance chain, blocks ───────────────────
 
     pub fn templateName(self: *Renderer, v: Value, line: usize) Error![]const u8 {
         if (v == .undef) return self.fail(line, "template name '{s}' is undefined", .{v.undef.name}, error.UndefinedValue);
@@ -426,14 +426,7 @@ pub const Renderer = struct {
 
         self.loads += 1;
         const parsed = self.lookup.compile(self.lookup.ctx, self.arena, source, self.diag) catch {
-            // The compile diagnostic lives in `self.diag`'s own buffer, so it
-            // has to be copied out before that buffer is rewritten — printing
-            // straight from it aliases source and destination.
-            var copy: [512]u8 = undefined;
-            const msg = self.diag.message();
-            const n = @min(msg.len, copy.len);
-            @memcpy(copy[0..n], msg[0..n]);
-            return self.fail(self.diag.line, "in template '{s}': {s}", .{ name, copy[0..n] }, error.TemplateSyntaxError);
+            return self.failInTemplate(name, error.TemplateSyntaxError);
         };
 
         const u = try self.arena.create(Unit);
@@ -479,9 +472,9 @@ pub const Renderer = struct {
             const was_prelude = self.prelude;
             self.prelude = true;
             self.pending_parent = null;
-            self.renderNodes(cur.parsed.nodes) catch |e| {
+            self.renderNodes(cur.parsed.nodes) catch |err| {
                 self.prelude = was_prelude;
-                return e;
+                return err;
             };
             self.prelude = was_prelude;
 
@@ -588,8 +581,6 @@ pub const Renderer = struct {
         return ns;
     }
 
-    // ── include / import ───────────────────────────────────────────────────
-
     pub fn renderInclude(self: *Renderer, i: ast.Include) Error!void {
         const v = try self.eval(i.names, i.line);
         const candidates: []const Value = switch (v) {
@@ -632,7 +623,7 @@ pub const Renderer = struct {
         const saved = self.swapFrames(frames);
         defer _ = self.swapFrames(saved);
 
-        try self.renderUnit(unit);
+        self.renderUnit(unit) catch |err| return self.failInTemplate(unit.name, err);
     }
 
     /// `{% import %}` / `{% from … import … %}` — run a template for its
@@ -685,7 +676,7 @@ pub const Renderer = struct {
         self.context = saved_ctx;
         self.in_module = saved_module;
         self.self_ns = saved_self;
-        try result;
+        result catch |err| return self.failInTemplate(unit.name, err);
 
         const ns = try self.arena.create(value.Namespace);
         ns.* = .{};
@@ -694,7 +685,42 @@ pub const Renderer = struct {
         return ns;
     }
 
-    // ── macros ─────────────────────────────────────────────────────────────
+    pub fn renderRender(self: *Renderer, r: ast.Render) Error!void {
+        const name_value = try self.eval(r.name, r.line);
+        const name = try self.templateName(name_value, r.line);
+        const unit = try self.requireUnit(name, r.line);
+
+        const passed_values = try self.arena.alloc(Value, r.assignments.len);
+        for (r.assignments, 0..) |assignment, i| {
+            passed_values[i] = try self.eval(assignment.expr, r.line);
+        }
+
+        const saved_ctx = self.context;
+        const saved_self = self.self_ns;
+        defer {
+            self.context = saved_ctx;
+            self.self_ns = saved_self;
+        }
+
+        self.context = .{ .map = .{ .pairs = &.{} } };
+        self.self_ns = null;
+
+        var child_frame = try self.newFrame();
+        for (r.assignments, passed_values) |assignment, passed_value| {
+            switch (assignment.target) {
+                .name => |key| try child_frame.put(self.arena, key, passed_value),
+                else => return self.fail(r.line, "render `with` arguments must be variable names", .{}, error.BadArgument),
+            }
+        }
+
+        var child_frames: std.ArrayList(*Frame) = .empty;
+        try child_frames.append(self.arena, child_frame);
+
+        const saved_frames = self.swapFrames(child_frames);
+        defer _ = self.swapFrames(saved_frames);
+
+        self.renderUnit(unit) catch |err| return self.failInTemplate(unit.name, err);
+    }
 
     pub fn makeMacro(self: *Renderer, def: *const ast.MacroDef, block_body: ?[]const Node) Error!Value {
         const impl = try self.arena.create(MacroImpl);
@@ -1032,8 +1058,6 @@ pub const Renderer = struct {
         return v.truthy();
     }
 
-    // ── expressions ─────────────────────────────────────────────────────────
-
     pub fn eval(self: *Renderer, e: *const Expr, line: usize) Error!Value {
         switch (e.*) {
             .literal => |v| return v,
@@ -1298,8 +1322,6 @@ pub const Renderer = struct {
         }
         return .{ .list = out };
     }
-
-    // ── attribute / item / method access ────────────────────────────────────
 
     pub fn getAttr(self: *Renderer, obj: Value, name: []const u8, line: usize) Error!Value {
         switch (obj) {

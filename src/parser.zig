@@ -206,6 +206,7 @@ pub const Parser = struct {
         if (std.mem.eql(u8, kw.text, "include")) return self.parseInclude(rest, line, out);
         if (std.mem.eql(u8, kw.text, "import")) return self.parseImport(rest, line, out);
         if (std.mem.eql(u8, kw.text, "from")) return self.parseFromImport(rest, line, out);
+        if (std.mem.eql(u8, kw.text, "render")) return self.parseRender(rest, line, out);
         if (std.mem.eql(u8, kw.text, "macro")) return self.parseMacro(rest, line, out);
         if (std.mem.eql(u8, kw.text, "call")) return self.parseCallBlock(rest, line, out);
 
@@ -581,6 +582,41 @@ pub const Parser = struct {
         } });
     }
 
+    fn parseRender(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+        var ts: Stream = .{ .toks = rest, .p = self };
+
+        const name = try ts.parseExpression(line, true);
+        var assignments: std.ArrayList(ast.Set) = .empty;
+
+        if (ts.eatName("with")) {
+            while (true) {
+                const key = try ts.expect(.name, line, "expected a variable name after `with`");
+                _ = try ts.expect(.assign, line, "expected `=` after render variable name");
+                const expr = try ts.parseExpression(line, true);
+
+                try assignments.append(self.arena, .{
+                    .target = .{ .name = key.text },
+                    .expr = expr,
+                });
+
+                if (!ts.eat(.comma)) break;
+                if (ts.peek() == null) {
+                    return self.failAt(line, "expected another variable assignment after `,`");
+                }
+            }
+        }
+
+        try ts.expectEnd(line);
+
+        try out.append(self.arena, .{
+            .render = .{
+                .name = name,
+                .assignments = assignments.items,
+                .line = line,
+            },
+        });
+    }
+
     pub fn parseParams(self: *Parser, ts: *Stream, line: usize) Error![]const ast.Param {
         var params: std.ArrayList(ast.Param) = .empty;
         _ = try ts.expect(.lparen, line, "expected `(`");
@@ -674,6 +710,7 @@ pub fn nodeMentions(n: Node, name: []const u8) bool {
         .include => |i| exprMentions(i.names, name),
         .import => |i| exprMentions(i.name, name),
         .from_import => |i| exprMentions(i.template, name),
+        .render => |r| exprMentions(r.name, name),
         // A nested macro has its own `varargs`/`kwargs`/`caller`; mentions
         // inside it do not belong to the enclosing one.
         .macro => false,
@@ -809,8 +846,6 @@ pub const Stream = struct {
     pub fn release(self: *Stream, held: usize) void {
         self.p.release(held);
     }
-
-    // ── targets ─────────────────────────────────────────────────────────────
 
     pub fn parseTarget(self: *Stream, line: usize, allow_attr_or_item: bool) Error!ast.Target {
         const paren = self.eat(.lparen);

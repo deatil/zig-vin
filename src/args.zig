@@ -38,7 +38,7 @@ pub const Ctx = struct {
     autoescape: bool,
     strict: bool,
     diag: *Diagnostic,
-    user: *const anyopaque,
+    user: *anyopaque,
     callFilter: *const fn (ctx: *Ctx, name: []const u8, input: Value, args: Args) Error!Value,
     callTest: *const fn (ctx: *Ctx, name: []const u8, input: Value, args: Args) Error!bool,
 

@@ -1708,10 +1708,10 @@
     "keep_trailing_newline": false,
     "lstrip_blocks": false,
     "name": "unless_elif_else",
-    "out": "big",
+    "out": "small",
     "status": "ok",
     "strict": false,
-    "template": "{% unless n > 5 %}big{% elif n > 2 %}mid{% else %}small{% endunless %}",
+    "template": "{% unless n < 5 %}big{% elif n > 2 %}mid{% else %}small{% endunless %}",
     "templates": {},
     "trim_blocks": false
    },
@@ -4293,6 +4293,22 @@
     "inc": "<included>"
    },
    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
+    "context": "{}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "render_basic",
+    "out": "a<render>b",
+    "status": "ok",
+    "strict": false,
+    "template": "a{% render 'inc' %}b",
+    "templates": {
+     "inc": "<render>"
+    },
+    "trim_blocks": false
   },
   {
    "autoescape": false,

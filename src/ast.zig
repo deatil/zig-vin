@@ -204,6 +204,12 @@ pub const FromImport = struct {
     line: usize,
 };
 
+pub const Render = struct {
+    name: *const Expr,
+    assignments: []const Set = &.{},
+    line: usize,
+};
+
 pub const CallBlock = struct {
     /// The macro invocation the body is handed to.
     call: *const Expr,
@@ -241,6 +247,7 @@ pub const Node = union(enum) {
     include: Include,
     import: Import,
     from_import: FromImport,
+    render: Render,
     macro: struct { def: *const MacroDef, line: usize },
     call_block: CallBlock,
     /// A generic catch-all node for extensions or tooling.
