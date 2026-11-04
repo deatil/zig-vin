@@ -53,9 +53,9 @@ pub const Registry = struct {
     hasFilter: *const fn (ctx: *const anyopaque, name: []const u8) bool,
     hasTest: *const fn (ctx: *const anyopaque, name: []const u8) bool,
     hasGlobal: *const fn (ctx: *const anyopaque, name: []const u8) bool,
+    hasGlobalValue: *const fn (ctx: *const anyopaque, name: []const u8) bool,
     hasMethod: *const fn (ctx: *const anyopaque, name: []const u8) bool,
     hasTag: *const fn (ctx: *const anyopaque, name: []const u8) bool,
-    hasGlobalValue: *const fn (ctx: *const anyopaque, name: []const u8) bool,
     tag: *const fn (ctx: *const anyopaque, name: []const u8) ?TagFn,
 };
 

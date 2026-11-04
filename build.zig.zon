@@ -1,7 +1,7 @@
 .{
     .name = .zig_vin,
-    .description = "A template library like jinja for zig.",
-    .version = "0.1.6",
+    .description = "A template render library like jinja2 for zig.",
+    .version = "0.1.7",
     .fingerprint = 0xcba32739c34472e,
     .minimum_zig_version = "0.17.0",
     .paths = .{

@@ -994,7 +994,7 @@ pub const Renderer = struct {
                         try n.set(self.arena, a.name, v);
                     },
                     .callable => |c| {
-                        var ctx = self.filterCtx();
+                        var ctx = self.useCtx();
                         if (c.setAttr) |fn_ptr| {
                             return fn_ptr(c.ctx, &ctx, a.name, v) catch |err| {
                                 return self.fail(line, "'{s}' set attr fail", .{a.name}, err);
@@ -1022,7 +1022,7 @@ pub const Renderer = struct {
                         try n.set(self.arena, idx_str, v);
                     },
                     .callable => |c| {
-                        var ctx = self.filterCtx();
+                        var ctx = self.useCtx();
                         if (c.setItem) |fn_ptr| {
                             return fn_ptr(c.ctx, &ctx, idx, v) catch |err| {
                                 const idx_str = try value.strAlloc(self.arena, idx);
@@ -1166,7 +1166,7 @@ pub const Renderer = struct {
                 const args = try self.evalArgs(t.args, t.line);
                 const fn_ptr = self.lookup.test_fn(self.lookup.ctx, t.name) orelse
                     return self.fail(t.line, "unknown test '{s}'", .{t.name}, error.UnknownFilter);
-                var ctx = self.filterCtx();
+                var ctx = self.useCtx();
                 const res = fn_ptr(&ctx, input, args) catch |err| return self.opError(t.line, err);
                 return .{ .boolean = if (t.negated) !res else res };
             },
@@ -1192,7 +1192,7 @@ pub const Renderer = struct {
         return .{ .pos = pos, .kw = kw };
     }
 
-    pub fn filterCtx(self: *Renderer) args_mod.Ctx {
+    pub fn useCtx(self: *Renderer) args_mod.Ctx {
         return .{
             .arena = self.arena,
             .io = self.io,
@@ -1225,14 +1225,14 @@ pub const Renderer = struct {
     pub fn callTestThunk(ctx: *args_mod.Ctx, name: []const u8, input: Value, args: args_mod.Args) args_mod.Error!bool {
         const self: *Renderer = @ptrCast(@alignCast(@constCast(ctx.user)));
         const fn_ptr = self.lookup.test_fn(self.lookup.ctx, name) orelse return error.BadArgument;
-        var sub = self.filterCtx();
+        var sub = self.useCtx();
         return fn_ptr(&sub, input, args);
     }
 
     pub fn applyFilter(self: *Renderer, name: []const u8, input: Value, args: args_mod.Args, line: usize) Error!Value {
         const fn_ptr = self.lookup.filter(self.lookup.ctx, name) orelse
             return self.fail(line, "unknown filter '{s}'", .{name}, error.UnknownFilter);
-        var ctx = self.filterCtx();
+        var ctx = self.useCtx();
         return fn_ptr(&ctx, input, args) catch |err| {
             if (self.diag.len == 0) self.diag.set(line, "filter '{s}': {s}", .{ name, @errorName(err) });
             return err;
@@ -1245,7 +1245,7 @@ pub const Renderer = struct {
             const args = try self.evalArgs(c.args, c.line);
 
             if (self.lookup.global(self.lookup.ctx, name)) |fn_ptr| {
-                var ctx = self.filterCtx();
+                var ctx = self.useCtx();
 
                 return fn_ptr(&ctx, args) catch |err| switch (err) {
                     error.DiagInvalidTemplateSyntax, error.DiagBadArgument => {
@@ -1264,7 +1264,7 @@ pub const Renderer = struct {
             if (bound == .macro) return self.callMacro(bound.macro, args, c.line);
             if (bound == .callable) {
                 const callable = bound.callable;
-                var ctx = self.filterCtx();
+                var ctx = self.useCtx();
 
                 if (callable.call) |callFn| {
                     return callFn(callable.ctx, &ctx, args) catch |err| {
@@ -1273,7 +1273,7 @@ pub const Renderer = struct {
                 }
             }
             if (bound == .caller) {
-                var ctx = self.filterCtx();
+                var ctx = self.useCtx();
                 return bound.caller.call(&ctx, args) catch |err| {
                     return self.fail(c.line, "'{s}' function caller fail", .{name}, err);
                 };
@@ -1341,7 +1341,7 @@ pub const Renderer = struct {
             .namespace => |ns| return ns.get(name) orelse .{ .undef = .{ .name = name } },
             .callable => |c| {
                 if (c.getAttr) |fn_ptr| {
-                    var ctx = self.filterCtx();
+                    var ctx = self.useCtx();
                     return fn_ptr(c.ctx, &ctx, name) catch |err| {
                         return self.fail(line, "'{s}' get attr fail", .{name}, err);
                     };
@@ -1414,7 +1414,7 @@ pub const Renderer = struct {
             },
             .callable => |c| {
                 if (c.getItem) |fn_ptr| {
-                    var ctx = self.filterCtx();
+                    var ctx = self.useCtx();
 
                     var new_idx: Value = undefined;
                     if (idx == .undef) {
@@ -1500,7 +1500,7 @@ pub const Renderer = struct {
             const c = obj.callable;
 
             if (c.callMethod) |call_method| {
-                var ctx = self.filterCtx();
+                var ctx = self.useCtx();
                 return call_method(c.ctx, &ctx, name, args) catch |err| {
                     return self.fail(line, "'{s}' method invalid call", .{name}, err);
                 };
@@ -1508,7 +1508,7 @@ pub const Renderer = struct {
         }
 
         if (self.lookup.method(self.lookup.ctx, name)) |fn_ptr| {
-            var ctx = self.filterCtx();
+            var ctx = self.useCtx();
             return fn_ptr(&ctx, obj, args) catch |err| switch (err) {
                 error.DiagInvalidTemplateSyntax, error.DiagBadArgument => {
                     const msg = self.arena.print("{s}", .{ctx.diag.message()}) catch return error.BadCall;
@@ -1527,7 +1527,7 @@ pub const Renderer = struct {
                     else => unreachable,
                 };
 
-                var ctx = self.filterCtx();
+                var ctx = self.useCtx();
                 if (std.mem.eql(u8, name, "items")) return args_mod.pairsToList(&ctx, pairs);
                 if (std.mem.eql(u8, name, "keys")) {
                     const out = try self.arena.alloc(Value, pairs.len);

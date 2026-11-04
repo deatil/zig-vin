@@ -1,6 +1,6 @@
 ## Zig-vin 
 
-A template library like jinja for zig.
+A template render library like jinja2 for zig.
 
 
 ### Env

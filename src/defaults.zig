@@ -650,8 +650,6 @@ fn fSum(ctx: *Ctx, input: Value, args: Args) Error!Value {
     return acc;
 }
 
-// filter
-
 fn fLength(ctx: *Ctx, input: Value, args: Args) Error!Value {
     _ = ctx;
     _ = args;
