@@ -124,6 +124,8 @@ const MacroImpl = struct {
     /// A block rendered through `self.name()` — it must not be re-entered as a
     /// chain block, and it has no parameters.
     block_body: ?[]const Node = null,
+    /// Which template defined this macro.
+    template_name: []const u8 = "",
 };
 
 /// The state a `{% for … recursive %}` body needs so `loop()` can re-enter it.
@@ -226,6 +228,8 @@ pub const Renderer = struct {
     in_module: bool = false,
     /// for set context value
     context_values: std.StringHashMapUnmanaged(Value) = .empty,
+    /// The template currently being rendered, used to stamp macro origin.
+    current_template: ?*Unit = null,
 
     pub fn fail(self: *Renderer, line: usize, comptime fmt: []const u8, args: anytype, e: Error) Error {
         self.diag.set(line, fmt, args);
@@ -457,12 +461,17 @@ pub const Renderer = struct {
         defer self.template_depth -= 1;
 
         const saved_chain = self.chain;
-        defer self.chain = saved_chain;
+        const saved_template = self.current_template;
+        defer {
+            self.chain = saved_chain;
+            self.current_template = saved_template;
+        }
 
         if (entry.parsed.extends == null) {
             const one = try self.arena.alloc(*Unit, 1);
             one[0] = entry;
             self.chain = one;
+            self.current_template = entry;
             return self.renderNodes(entry.parsed.nodes);
         }
 
@@ -474,6 +483,7 @@ pub const Renderer = struct {
             // The prelude runs the child's top-level statements for effect.
             const was_prelude = self.prelude;
             self.prelude = true;
+            self.current_template = cur;
             self.pending_parent = null;
             self.renderNodes(cur.parsed.nodes) catch |err| {
                 self.prelude = was_prelude;
@@ -496,6 +506,7 @@ pub const Renderer = struct {
         }
 
         self.chain = chain.items;
+        self.current_template = cur;
         self.renderNodes(cur.parsed.nodes) catch |err| {
             return self.failInTemplate(cur.name, err);
         };
@@ -735,6 +746,7 @@ pub const Renderer = struct {
 
     pub fn makeMacro(self: *Renderer, def: *const ast.MacroDef, block_body: ?[]const Node) Error!Value {
         const impl = try self.arena.create(MacroImpl);
+        const template_name = if (self.current_template) |ct| ct.name else "<string>";
         impl.* = .{
             .def = def,
             // The frames are captured by POINTER, so a macro defined before a
@@ -743,6 +755,7 @@ pub const Renderer = struct {
             .captured = try self.arena.dupe(*Frame, self.frames.items),
             .keep_context = !self.in_module,
             .block_body = block_body,
+            .template_name = template_name,
         };
         return .{ .macro = .{ .name = def.name, .impl = impl } };
     }
@@ -792,7 +805,7 @@ pub const Renderer = struct {
         const result = self.renderNodes(body);
         self.out = saved_out;
         self.out.written = sink.written;
-        try result;
+        result  catch |err| return self.failInTemplate(impl.template_name, err);
 
         return .{ .string = .{ .bytes = aw.written(), .safe = self.opts.autoescape } };
     }
@@ -1357,7 +1370,11 @@ pub const Renderer = struct {
 
     pub fn macroAttr(self: *Renderer, m: value.MacroRef, name: []const u8) Error!Value {
         const impl: *const MacroImpl = @ptrCast(@alignCast(m.impl));
+
         if (std.mem.eql(u8, name, "name")) return Value.fromString(m.name);
+        if (std.mem.eql(u8, name, "template")) return Value.fromString(impl.template_name);
+        if (std.mem.eql(u8, name, "template_name")) return Value.fromString(impl.template_name);
+
         if (std.mem.eql(u8, name, "arguments")) {
             const out = try self.arena.alloc(Value, impl.def.params.len);
             for (impl.def.params, 0..) |p, i| out[i] = Value.fromString(p.name);
@@ -1366,6 +1383,7 @@ pub const Renderer = struct {
         if (std.mem.eql(u8, name, "catch_varargs")) return .{ .boolean = impl.def.catch_varargs };
         if (std.mem.eql(u8, name, "catch_kwargs")) return .{ .boolean = impl.def.catch_kwargs };
         if (std.mem.eql(u8, name, "caller")) return .{ .boolean = impl.def.uses_caller };
+
         return .{ .undef = .{ .name = name } };
     }
 

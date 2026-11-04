@@ -1533,7 +1533,7 @@ test "render with data" {
         try testing.expectError(error.UndefinedValue, out);
 
         const msg = try a.print("{f}", .{diag});
-        try testing.expectEqualStrings("line 3: 'name1' is undefined", msg);
+        try testing.expectEqualStrings("line 3: in template 'renders/base1': 'name1' is undefined", msg);
     }
 
     {
@@ -1564,4 +1564,21 @@ test "render with data" {
         const msg = try a.print("{f}", .{diag});
         try testing.expectEqualStrings("line 7: in template 'renders/base2': 'name1' is undefined", msg);
     }
+}
+
+test "macro template name" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile("{% macro foo() %}OK{% endmacro %}{{ foo.template_name }}", null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("<string>", out);
 }
