@@ -233,7 +233,10 @@ pub const Renderer = struct {
     }
 
     pub fn failInTemplate(self: *Renderer, template_name: []const u8, err: Error) Error {
-        const msg = try self.arena.print("{s}", .{self.diag.message()});
+        const info = self.diag.message();
+        if (std.mem.startsWith(u8, info, "in template")) return err;
+
+        const msg = try self.arena.dupe(u8, info);
         return self.fail(self.diag.line, "in template '{s}': {s}", .{ template_name, msg }, err);
     }
 
@@ -474,7 +477,7 @@ pub const Renderer = struct {
             self.pending_parent = null;
             self.renderNodes(cur.parsed.nodes) catch |err| {
                 self.prelude = was_prelude;
-                return err;
+                return self.failInTemplate(cur.name, err);
             };
             self.prelude = was_prelude;
 
@@ -493,7 +496,9 @@ pub const Renderer = struct {
         }
 
         self.chain = chain.items;
-        try self.renderNodes(cur.parsed.nodes);
+        self.renderNodes(cur.parsed.nodes) catch |err| {
+            return self.failInTemplate(cur.name, err);
+        };
     }
 
     /// The most derived definition of `name`, as an index into `chain`.
@@ -524,8 +529,11 @@ pub const Renderer = struct {
             // loop's variables.
             try self.pushFrame();
             defer self.pop();
-            return self.renderNodes(def.body);
+            return self.renderNodes(def.body) catch |err| {
+                return self.failInTemplate(self.chain[idx].name, err);
+            };
         }
+
         // Without it a block sees only template-level names — which is why a
         // block inside a `{% for %}` cannot read the loop variable.
         var sub: std.ArrayList(*Frame) = .empty;
@@ -533,7 +541,10 @@ pub const Renderer = struct {
         try sub.append(self.arena, try self.newFrame());
         const saved = self.swapFrames(sub);
         defer _ = self.swapFrames(saved);
-        try self.renderNodes(def.body);
+
+        self.renderNodes(def.body) catch |err| {
+            return self.failInTemplate(self.chain[idx].name, err);
+        };
     }
 
     /// `{{ super() }}` — the next definition of the block currently rendering.

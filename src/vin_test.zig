@@ -1548,7 +1548,7 @@ test "render with data" {
         try testing.expectError(error.UndefinedValue, out);
 
         const msg = try a.print("{f}", .{diag});
-        try testing.expectEqualStrings("line 6: 'name2' is undefined", msg);
+        try testing.expectEqualStrings("line 6: in template '<string>': 'name2' is undefined", msg);
     }
     {
         const ctx = try vin.valueFrom(a, .{
@@ -1562,6 +1562,6 @@ test "render with data" {
         try testing.expectError(error.UndefinedValue, out);
 
         const msg = try a.print("{f}", .{diag});
-        try testing.expectEqualStrings("line 7: 'name1' is undefined", msg);
+        try testing.expectEqualStrings("line 7: in template 'renders/base2': 'name1' is undefined", msg);
     }
 }
