@@ -31,7 +31,7 @@ is worse than a failed render, so the default is inverted deliberately. Pass
 a file extension (this module has no file loader), and `|safe`/`|escape`
 behave as markupsafe's `Markup` does in both settings.
 
-# Tags
+## Tags
 
 A Jinja2-compatible template engine in pure Zig. It takes a template string and
 a context value and produces bytes: `{{ expression }}` output, `{# comments #}`,

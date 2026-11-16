@@ -1261,6 +1261,363 @@ fn fGroupby(ctx: *Ctx, input: Value, args: Args) Error!Value {
     return .{ .list = out.items };
 }
 
+const FormatSpec = struct {
+    mapping_key: ?[]const u8 = null,
+    left: bool = false,
+    plus: bool = false,
+    space: bool = false,
+    alternate: bool = false,
+    zero: bool = false,
+    width: usize = 0,
+    precision: ?usize = null,
+    conversion: u8 = 0,
+};
+
+fn fFormat(ctx: *Ctx, input: Value, args: Args) Error!Value {
+    const fmt = try ctx.toStr(input);
+    var out: std.ArrayList(u8) = .empty;
+    var pos: usize = 0;
+    var arg_index: usize = 0;
+    var uses_mapping = false;
+    var uses_positional = false;
+
+    while (pos < fmt.len) {
+        if (fmt[pos] != '%') {
+            try out.append(ctx.arena, fmt[pos]);
+            pos += 1;
+            continue;
+        }
+
+        pos += 1;
+        if (pos == fmt.len) return error.BadArgument;
+
+        if (fmt[pos] == '%') {
+            try out.append(ctx.arena, '%');
+            pos += 1;
+            continue;
+        }
+
+        var spec: FormatSpec = .{};
+
+        // Mapping key: %(name)s
+        if (fmt[pos] == '(') {
+            pos += 1;
+            const start = pos;
+            while (pos < fmt.len and fmt[pos] != ')') : (pos += 1) {}
+            if (pos == fmt.len or pos == start) return error.BadArgument;
+            spec.mapping_key = fmt[start..pos];
+            pos += 1;
+            uses_mapping = true;
+        }
+
+        // Flags
+        while (pos < fmt.len) : (pos += 1) {
+            switch (fmt[pos]) {
+                '-' => spec.left = true,
+                '+' => spec.plus = true,
+                ' ' => spec.space = true,
+                '#' => spec.alternate = true,
+                '0' => spec.zero = true,
+                else => break,
+            }
+        }
+
+        // Width: a number or *
+        if (pos < fmt.len and fmt[pos] == '*') {
+            if (spec.mapping_key != null) return error.BadArgument;
+            const width_arg = try nextFormatArg(args, &arg_index);
+            const width_int = try args_mod.intArg(width_arg, 0);
+            if (width_int < 0) {
+                spec.left = true;
+                spec.width = @intCast(-@as(i128, width_int));
+            } else {
+                spec.width = @intCast(width_int);
+            }
+            pos += 1;
+        } else {
+            spec.width = try parseFormatDigits(fmt, &pos);
+        }
+
+        // Precision: .number or .*
+        if (pos < fmt.len and fmt[pos] == '.') {
+            pos += 1;
+            if (pos < fmt.len and fmt[pos] == '*') {
+                if (spec.mapping_key != null) return error.BadArgument;
+                const precision_arg = try nextFormatArg(args, &arg_index);
+                const precision_int = try args_mod.intArg(precision_arg, 0);
+                // Python treats a negative dynamic precision as omitted.
+                if (precision_int >= 0) spec.precision = @intCast(precision_int);
+                pos += 1;
+            } else {
+                // In printf/Python, a bare "." means precision zero.
+                spec.precision = try parseFormatDigits(fmt, &pos);
+            }
+        }
+
+        if (pos >= fmt.len) return error.BadArgument;
+        spec.conversion = fmt[pos];
+        pos += 1;
+
+        const value_ = if (spec.mapping_key) |key| blk: {
+            if (uses_positional) return error.BadArgument;
+            break :blk args.byName(key) orelse return error.BadArgument;
+        } else blk: {
+            if (uses_mapping) return error.BadArgument;
+            uses_positional = true;
+            break :blk try nextFormatArg(args, &arg_index);
+        };
+
+        const field = formatField(ctx, value_, spec) catch return error.BadArgument;
+        try appendPadded(ctx, &out, field, spec, isNumericConversion(spec.conversion));
+    }
+
+    if (uses_positional and arg_index != args.pos.len) return error.BadArgument;
+    return .{ .string = .{ .bytes = out.items, .safe = false } };
+}
+
+fn nextFormatArg(args: Args, index: *usize) Error!Value {
+    if (index.* >= args.pos.len) return error.BadArgument;
+    defer index.* += 1;
+    return args.pos[index.*];
+}
+
+fn parseFormatDigits(fmt: []const u8, pos: *usize) Error!usize {
+    var result: usize = 0;
+    while (pos.* < fmt.len and std.ascii.isDigit(fmt[pos.*])) : (pos.* += 1) {
+        const digit: usize = fmt[pos.*] - '0';
+        if (result > (value.max_alloc - digit) / 10) return error.OutOfRange;
+        result = result * 10 + digit;
+    }
+    return result;
+}
+
+fn isNumericConversion(conversion: u8) bool {
+    return switch (conversion) {
+        'd', 'i', 'u', 'o', 'x', 'X',
+        'e', 'E', 'f', 'F', 'g', 'G' => true,
+        else => false,
+    };
+}
+
+fn formatField(ctx: *Ctx, v: Value, spec: FormatSpec) ![]const u8 {
+    var aw: Writer.Allocating = .init(ctx.arena);
+
+    switch (spec.conversion) {
+        's' => {
+            const s = try ctx.toStr(v);
+            const shown = if (spec.precision) |p| s[0..@min(p, s.len)] else s;
+            try aw.writer.writeAll(shown);
+        },
+        'r' => try value.reprTo(&aw.writer, v),
+        'c' => {
+            const codepoint = try args_mod.intArg(v, 0);
+            if (codepoint < 0 or codepoint > 0x10ffff) return error.BadArgument;
+            var bytes: [4]u8 = undefined;
+            const len = try std.unicode.utf8Encode(@intCast(codepoint), &bytes);
+            try aw.writer.writeAll(bytes[0..len]);
+        },
+        'd', 'i', 'u' => {
+            const n = try args_mod.intArg(v, 0);
+            try writeInteger(&aw.writer, n, 10, false, spec);
+        },
+        'o' => {
+            const n = try args_mod.intArg(v, 0);
+            try writeInteger(&aw.writer, n, 8, false, spec);
+        },
+        'x' => {
+            const n = try args_mod.intArg(v, 0);
+            try writeInteger(&aw.writer, n, 16, false, spec);
+        },
+        'X' => {
+            const n = try args_mod.intArg(v, 0);
+            try writeInteger(&aw.writer, n, 16, true, spec);
+        },
+        'f', 'F', 'e', 'E', 'g', 'G' => {
+            const f: f64 = switch (v) {
+                .float => |x| x,
+                .integer => |x| @as(f64, @floatFromInt(x)),
+                .boolean => |x| if (x) 1.0 else 0.0,
+                .undef => return error.UndefinedValue,
+                else => return error.TypeMismatch,
+            };
+
+            try writeFloat(ctx, &aw.writer, f, spec);
+        },
+        else => return error.BadArgument,
+    }
+
+    return aw.written();
+}
+
+fn writeInteger(
+    writer: *Writer,
+    n: i64,
+    base: u8,
+    uppercase: bool,
+    spec: FormatSpec,
+) !void {
+    const negative = n < 0;
+    const magnitude: u64 = if (negative)
+        @intCast(-@as(i128, n))
+    else
+        @intCast(n);
+
+    if (negative) {
+        try writer.writeByte('-');
+    } else if (spec.plus) {
+        try writer.writeByte('+');
+    } else if (spec.space) {
+        try writer.writeByte(' ');
+    }
+
+    if (spec.alternate) {
+        switch (base) {
+            8 => try writer.writeAll("0o"),
+            16 => try writer.writeAll(if (uppercase) "0X" else "0x"),
+            else => {},
+        }
+    }
+
+    var digits: [64]u8 = undefined;
+    var len: usize = 0;
+    var x = magnitude;
+    const alphabet = if (uppercase) "0123456789ABCDEF" else "0123456789abcdef";
+
+    if (x == 0) {
+        digits[0] = '0';
+        len = 1;
+    } else {
+        while (x != 0) : (x /= base) {
+            digits[len] = alphabet[@intCast(x % base)];
+            len += 1;
+        }
+    }
+
+    if (spec.precision) |p| {
+        if (p == 0 and magnitude == 0) return;
+        while (len < p) {
+            try writer.writeByte('0');
+            // Precision zero-padding is emitted before the digits below.
+            len += 1;
+        }
+        // Regenerate digits because `len` may have been increased above.
+        var raw: [64]u8 = undefined;
+        var raw_len: usize = 0;
+        x = magnitude;
+        if (x == 0) {
+            raw[0] = '0';
+            raw_len = 1;
+        } else {
+            while (x != 0) : (x /= base) {
+                raw[raw_len] = alphabet[@intCast(x % base)];
+                raw_len += 1;
+            }
+        }
+        var zeros = p -| raw_len;
+        while (zeros > 0) : (zeros -= 1) try writer.writeByte('0');
+        while (raw_len > 0) {
+            raw_len -= 1;
+            try writer.writeByte(raw[raw_len]);
+        }
+        return;
+    }
+
+    while (len > 0) {
+        len -= 1;
+        try writer.writeByte(digits[len]);
+    }
+}
+
+fn writeFloat(ctx: *Ctx, writer: *Writer, f: f64, spec: FormatSpec) !void {
+    const conversion = spec.conversion;
+    const precision = spec.precision orelse 6;
+
+    if (!std.math.isFinite(f)) {
+        const text = if (std.math.isNan(f))
+            (if (conversion == 'F' or conversion == 'E' or conversion == 'G') "NAN" else "nan")
+        else
+            (if (conversion == 'F' or conversion == 'E' or conversion == 'G') "INF" else "inf");
+        try writeSign(writer, f < 0, spec);
+        try writer.writeAll(text);
+        return;
+    }
+
+    try writeSign(writer, f < 0 or (f == 0 and std.math.signbit(f)), spec);
+
+    var text2: []u8 = undefined;
+    if (conversion == 'g' or conversion == 'G') {
+        text2 = try ctx.arena.print("{}", .{f});
+    } else {
+        const mode: std.fmt.float.Mode = switch (conversion) {
+            'f', 'F' => .decimal,
+            'e', 'E' => .scientific,
+            else => unreachable,
+        };
+
+        var buf: [6000]u8 = undefined;
+        const rendered = try std.fmt.float.render(
+            &buf,
+            @abs(f),
+            .{ .mode = mode, .precision = precision },
+        );
+
+        text2 = try ctx.arena.dupe(u8, rendered);
+    }
+
+    if (spec.alternate and std.mem.findScalar(u8, text2, '.') == null) {
+        try writer.writeAll(text2);
+        try writer.writeByte('.');
+        return;
+    }
+
+    if (conversion == 'E' or conversion == 'F' or conversion == 'G') {
+        // Uppercase exponent and special-value spelling.
+        for (text2) |*c| {
+            if (c.* == 'e') c.* = 'E';
+        }
+    }
+
+    try writer.writeAll(text2);
+}
+
+fn writeSign(writer: *Writer, negative: bool, spec: FormatSpec) !void {
+    if (negative) {
+        try writer.writeByte('-');
+    } else if (spec.plus) {
+        try writer.writeByte('+');
+    } else if (spec.space) {
+        try writer.writeByte(' ');
+    }
+}
+
+fn appendPadded(
+    ctx: *Ctx,
+    out: *std.ArrayList(u8),
+    field: []const u8,
+    spec: FormatSpec,
+    numeric: bool,
+) !void {
+    const padding = spec.width -| field.len;
+    if (padding == 0) return out.appendSlice(ctx.arena, field);
+
+    if (spec.left) {
+        try out.appendSlice(ctx.arena, field);
+        return out.appendNTimes(ctx.arena, ' ', padding);
+    }
+
+    const pad_char: u8 = if (numeric and spec.zero and spec.precision == null) '0' else ' ';
+    if (pad_char == '0' and field.len != 0 and
+        (field[0] == '-' or field[0] == '+' or field[0] == ' '))
+    {
+        try out.append(ctx.arena, field[0]);
+        try out.appendNTimes(ctx.arena, '0', padding);
+        return out.appendSlice(ctx.arena, field[1..]);
+    }
+
+    try out.appendNTimes(ctx.arena, pad_char, padding);
+    try out.appendSlice(ctx.arena, field);
+}
+
 pub const builtin_filters = [_]FilterEntry{
     .{ .name = "abs", .func = fAbs },
     .{ .name = "batch", .func = fBatch },
@@ -1311,6 +1668,7 @@ pub const builtin_filters = [_]FilterEntry{
     .{ .name = "yesno", .func = fYesno },
     .{ .name = "filesizeformat", .func = fFilesizeformat },
     .{ .name = "groupby", .func = fGroupby },
+    .{ .name = "format", .func = fFormat },
 };
 
 // tests 
