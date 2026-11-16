@@ -4,9 +4,10 @@ const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
 
 const value = @import("value.zig");
-const Value = value.Value;
+const diag = @import("diag.zig");
 
-const Diagnostic = @import("diag.zig").Diagnostic;
+const Value = value.Value;
+const Diagnostic = diag.Diagnostic;
 
 pub const Error = value.Error;
 
@@ -111,6 +112,13 @@ pub fn seq(ctx: *Ctx, v: Value) Error![]const Value {
     return value.iterate(ctx.arena, v);
 }
 
+pub fn groupAttr(t: []const Value, name: []const u8) ?Value {
+    if (t.len != 2 or t[1] != .list) return null;
+    if (std.mem.eql(u8, name, "grouper")) return t[0];
+    if (std.mem.eql(u8, name, "list")) return t[1];
+    return null;
+}
+
 /// `attribute=` support, shared by sort/min/max/sum/unique/map/groupby-likes.
 /// A dotted path (`a.b`) and an integer index both work, as in the reference.
 pub fn attrOf(ctx: *Ctx, item: Value, spec: Value) Error!Value {
@@ -133,6 +141,7 @@ pub fn attrOf(ctx: *Ctx, item: Value, spec: Value) Error!Value {
                 cur = switch (cur) {
                     .map => |m| m.get(part) orelse return .{ .undef = .{ .name = part } },
                     .namespace => |ns| ns.get(part) orelse return .{ .undef = .{ .name = part } },
+                    .tuple => |t| groupAttr(t, part) orelse return .{ .undef = .{ .name = part } },
                     else => return .{ .undef = .{ .name = part } },
                 };
             }

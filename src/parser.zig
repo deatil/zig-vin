@@ -15,6 +15,7 @@ pub const Error = error{
     TemplateSyntaxError,
     TooDeep,
 };
+
 pub const Diagnostic = lex.Diagnostic;
 
 /// Bounds the parser enforces on the *shape* of one template's source.
@@ -196,6 +197,7 @@ pub const Parser = struct {
         if (std.mem.eql(u8, kw.text, "unless")) return self.parseUnless(rest, line, out);
         if (std.mem.eql(u8, kw.text, "case")) return self.parseCase(rest, line, out);
         if (std.mem.eql(u8, kw.text, "for")) return self.parseFor(rest, line, out);
+        if (std.mem.eql(u8, kw.text, "while")) return self.parseWhile(rest, line, out);
         if (std.mem.eql(u8, kw.text, "continue")) return self.parseContinue(rest, line, out);
         if (std.mem.eql(u8, kw.text, "break")) return self.parseBreak(rest, line, out);
         if (std.mem.eql(u8, kw.text, "set")) return self.parseSet(rest, line, out);
@@ -204,6 +206,7 @@ pub const Parser = struct {
         if (std.mem.eql(u8, kw.text, "extends")) return self.parseExtends(rest, line, out);
         if (std.mem.eql(u8, kw.text, "block")) return self.parseBlock(rest, line, out);
         if (std.mem.eql(u8, kw.text, "include")) return self.parseInclude(rest, line, out);
+        if (std.mem.eql(u8, kw.text, "includes")) return self.parseIncludes(rest, line, out);
         if (std.mem.eql(u8, kw.text, "import")) return self.parseImport(rest, line, out);
         if (std.mem.eql(u8, kw.text, "from")) return self.parseFromImport(rest, line, out);
         if (std.mem.eql(u8, kw.text, "render")) return self.parseRender(rest, line, out);
@@ -382,6 +385,19 @@ pub const Parser = struct {
         } });
     }
 
+    fn parseWhile(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+        var ts: Stream = .{ .toks = rest, .p = self };
+        const cond = try ts.parseExpression(line, true);
+        try ts.expectEnd(line);
+
+        const body = try self.parseBody(&.{"endwhile"});
+        try out.append(self.arena, .{ .while_ = .{
+            .cond = cond,
+            .body = body.nodes,
+            .line = line,
+        } });
+    }
+
     fn parseContinue(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         try ts.expectEnd(line);
@@ -542,7 +558,62 @@ pub const Parser = struct {
         } });
     }
 
-    fn parseImport(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    fn parseIncludes(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+        var ts: Stream = .{ .toks = rest, .p = self };
+        const names = try ts.parseExpression(line, true);
+
+        var ignore_missing = false;
+        if (ts.peek() != null and ts.peek().?.isName("ignore")) {
+            if (ts.peekAt(1) == null or !ts.peekAt(1).?.isName("missing"))
+                return self.failAt(line, "expected `missing` after `ignore`");
+            ts.i += 2;
+            ignore_missing = true;
+        }
+
+        const with_context = self.parseContextModifier(&ts, true);
+        try ts.expectEnd(line);
+
+        const saved_blocks = self.blocks;
+        defer self.blocks = saved_blocks;
+
+        self.blocks = .empty;
+
+        const body = try self.parseBody(&.{"endincludes"});
+
+        var slots: std.ArrayList(ast.BlockDef) = .empty;
+
+        for (body.nodes) |node| switch (node) {
+            .text => |text| {
+                if (std.mem.trim(u8, text, " \t\r\n").len != 0)
+                    return self.failAt(line, "an includes body may only contain blocks and whitespace");
+            },
+            .block => |position| {
+                var found: ?ast.BlockDef = null;
+
+                for (self.blocks.items) |definition| {
+                    if (std.mem.eql(u8, definition.name, position.name)) {
+                        found = definition;
+                        break;
+                    }
+                }
+
+                const definition = found orelse
+                    return self.failAt(line, "includes block definition was not found");
+                try slots.append(self.arena, definition);
+            },
+            else => return self.failAt(line, "an includes body may only contain blocks and whitespace"),
+        };
+
+        try out.append(self.arena, .{ .includes = .{
+            .names = names,
+            .blocks = slots.items,
+            .ignore_missing = ignore_missing,
+            .with_context = with_context,
+            .line = line,
+        } });
+    }
+
+    pub fn parseImport(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         const name = try ts.parseExpression(line, true);
         if (!ts.eatName("as")) return self.failAt(line, "expected `as` in import-tag");
@@ -557,7 +628,7 @@ pub const Parser = struct {
         } });
     }
 
-    fn parseFromImport(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseFromImport(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         const template = try ts.parseExpression(line, true);
         if (!ts.eatName("import")) return self.failAt(line, "expected `import` in from-tag");
@@ -582,15 +653,16 @@ pub const Parser = struct {
         } });
     }
 
-    fn parseRender(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseRender(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
 
         const name = try ts.parseExpression(line, true);
         var assignments: std.ArrayList(ast.Set) = .empty;
+        var loop: ?ast.RenderLoop = null;
 
-        if (ts.eatName("with")) {
+        if (ts.eatName("set")) {
             while (true) {
-                const key = try ts.expect(.name, line, "expected a variable name after `with`");
+                const key = try ts.expect(.name, line, "expected a variable name after `set`");
                 _ = try ts.expect(.assign, line, "expected `=` after render variable name");
                 const expr = try ts.parseExpression(line, true);
 
@@ -604,6 +676,41 @@ pub const Parser = struct {
                     return self.failAt(line, "expected another variable assignment after `,`");
                 }
             }
+        } else if (ts.eatName("with")) {
+            // {% render 'tpl' with item %}
+            // {% render 'tpl' with item as val %}
+            while (true) {
+                const source = try ts.expect(.name, line, "expected a variable name after `set`");
+
+                var target_name = source.text;
+                if (ts.eatName("as")) {
+                    target_name = (try ts.expect(.name, line, "expected a variable name after `as`")).text;
+                }
+
+                const expr = try ts.dupe(.{ .name = source.text });
+                try assignments.append(self.arena, .{
+                    .target = .{ .name = target_name },
+                    .expr = expr,
+                });
+
+                if (!ts.eat(.comma)) break;
+                if (ts.peek() == null) {
+                    return self.failAt(line, "expected another variable after `,`");
+                }
+            }
+        } else if (ts.eatName("for")) {
+            const iterable = try ts.parseExpression(line, true);
+
+            if (!ts.eatName("as")) {
+                return self.failAt(line, "expected `as` after render loop expression");
+            }
+
+            const target = try ts.expect(.name, line, "expected a variable name after `as`");
+
+            loop = .{
+                .iterable = iterable,
+                .target = target.text,
+            };
         }
 
         try ts.expectEnd(line);
@@ -612,6 +719,7 @@ pub const Parser = struct {
             .render = .{
                 .name = name,
                 .assignments = assignments.items,
+                .loop = loop,
                 .line = line,
             },
         });
@@ -696,6 +804,7 @@ pub fn nodeMentions(n: Node, name: []const u8) bool {
         .for_ => |f| exprMentions(f.iterable, name) or
             (f.cond != null and exprMentions(f.cond.?, name)) or
             mentionsName(f.body, name) or mentionsName(f.empty, name),
+        .while_ => |w| exprMentions(w.cond, name) or mentionsName(w.body, name),
         .continue_ => false,
         .break_ => false,
         .set => |st| exprMentions(st.expr, name),
@@ -706,16 +815,19 @@ pub fn nodeMentions(n: Node, name: []const u8) bool {
             break :blk mentionsName(w.body, name);
         },
         .extends => |e| exprMentions(e.name, name),
-        .block => false,
         .include => |i| exprMentions(i.names, name),
+        .includes => |i| blk: {
+            if (exprMentions(i.names, name)) break :blk true;
+            for (i.blocks) |block| {
+                if (mentionsName(block.body, name)) break :blk true;
+            }
+            break :blk false;
+        },
         .import => |i| exprMentions(i.name, name),
         .from_import => |i| exprMentions(i.template, name),
         .render => |r| exprMentions(r.name, name),
-        // A nested macro has its own `varargs`/`kwargs`/`caller`; mentions
-        // inside it do not belong to the enclosing one.
-        .macro => false,
         .call_block => |c| exprMentions(c.call, name),
-        .generic => false,
+        else => false,
     };
 }
 

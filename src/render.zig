@@ -8,11 +8,12 @@ const value = @import("value.zig");
 const args_mod = @import("args.zig");
 const loader_mod = @import("loader.zig");
 const parser = @import("parser.zig");
-const Diagnostic = @import("diag.zig").Diagnostic;
+const diags = @import("diag.zig");
 
 const Value = value.Value;
 const Expr = ast.Expr;
 const Node = ast.Node;
+const Diagnostic = diags.Diagnostic;
 
 pub const Error = value.Error || error{
     /// The output exceeded `Options.max_output_bytes`.
@@ -46,6 +47,8 @@ pub const Error = value.Error || error{
     LoopContinue,
     /// A loop body executed `{% break %}`.
     LoopBreak,
+    /// A `{% while %}` tag exceeded `Options.max_while_iterations`.
+    LoopLimitExceeded,
 };
 
 pub const UndefinedPolicy = enum {
@@ -74,6 +77,8 @@ pub const Options = struct {
     max_call_depth: usize = 64,
     /// How many distinct templates one render may load.
     max_templates: usize = 256,
+    /// Maximum number of iterations for one `{% while %}` tag.
+    max_while_iterations: usize = 1_000_000,
 };
 
 /// How the renderer reaches the environment's filter/test registries without
@@ -227,9 +232,11 @@ pub const Renderer = struct {
     /// do not capture the importing render's context.
     in_module: bool = false,
     /// for set context value
-    context_values: std.StringHashMapUnmanaged(Value) = .empty,
+    environments: std.StringHashMapUnmanaged(Value) = .empty,
     /// The template currently being rendered, used to stamp macro origin.
     current_template: ?*Unit = null,
+    /// Slot overrides active for the current `{% includes %}` render.
+    include_blocks: []const ast.BlockDef = &.{},
 
     pub fn fail(self: *Renderer, line: usize, comptime fmt: []const u8, args: anytype, e: Error) Error {
         self.diag.set(line, fmt, args);
@@ -323,6 +330,7 @@ pub const Renderer = struct {
             },
             .case_ => |c| try self.renderCase(c),
             .for_ => |f| try self.renderFor(f),
+            .while_ => |w| try self.renderWhile(w),
             .continue_ => |c| {
                 if (self.loop_depth == 0) {
                     return self.fail(c.line, "continue outside of a loop", .{}, error.TemplateSyntaxError);
@@ -391,6 +399,7 @@ pub const Renderer = struct {
                 try self.renderBlockNamed(b.name, b.line);
             },
             .include => |i| try self.renderInclude(i),
+            .includes => |i| try self.renderIncludes(i),
             .import => |i| {
                 const ns = try self.importModule(i.name, i.with_context, i.line);
                 try self.define(i.target, .{ .namespace = ns });
@@ -524,6 +533,11 @@ pub const Renderer = struct {
     }
 
     pub fn renderBlockNamed(self: *Renderer, name: []const u8, line: usize) Error!void {
+        for (self.include_blocks) |block| {
+            if (std.mem.eql(u8, block.name, name))
+                return self.renderNodes(block.body);
+        }
+
         const found = self.resolveBlock(name, 0) orelse return;
         try self.renderBlockDef(name, found.idx, found.def, line);
     }
@@ -603,8 +617,13 @@ pub const Renderer = struct {
         return ns;
     }
 
-    pub fn renderInclude(self: *Renderer, i: ast.Include) Error!void {
-        const v = try self.eval(i.names, i.line);
+    fn loadIncludedUnit(
+        self: *Renderer,
+        names_expr: *const Expr,
+        ignore_missing: bool,
+        line: usize,
+    ) Error!?*Unit {
+        const v = try self.eval(names_expr, line);
         const candidates: []const Value = switch (v) {
             .list, .tuple => |items| items,
             else => blk: {
@@ -613,13 +632,44 @@ pub const Renderer = struct {
                 break :blk one;
             },
         };
-        for (candidates) |c| {
-            const name = try self.templateName(c, i.line);
-            const unit = try self.loadUnit(name, i.line) orelse continue;
-            return self.renderNested(unit, i.with_context);
+
+        for (candidates) |candidate| {
+            const name = try self.templateName(candidate, line);
+            if (try self.loadUnit(name, line)) |unit| return unit;
         }
-        if (i.ignore_missing) return;
-        return self.fail(i.line, "none of the included templates could be loaded", .{}, error.TemplateNotFound);
+
+        if (ignore_missing) return null;
+        return self.fail(line, "none of the included templates could be loaded", .{}, error.TemplateNotFound);
+    }
+
+    /// `{% include %}` keeps its original behavior and never applies slots.
+    pub fn renderInclude(self: *Renderer, i: ast.Include) Error!void {
+        const unit = (try self.loadIncludedUnit(
+            i.names,
+            i.ignore_missing,
+            i.line,
+        )) orelse return;
+
+        const saved_blocks = self.include_blocks;
+        self.include_blocks = &.{};
+        defer self.include_blocks = saved_blocks;
+
+        try self.renderNested(unit, i.with_context);
+    }
+
+    /// `{% includes %}` renders with its own block-slot overrides.
+    pub fn renderIncludes(self: *Renderer, i: ast.Includes) Error!void {
+        const unit = (try self.loadIncludedUnit(
+            i.names,
+            i.ignore_missing,
+            i.line,
+        )) orelse return;
+
+        const saved_blocks = self.include_blocks;
+        self.include_blocks = i.blocks;
+        defer self.include_blocks = saved_blocks;
+
+        try self.renderNested(unit, i.with_context);
     }
 
     /// Render `unit` inside the current render. With context it sees everything
@@ -717,6 +767,32 @@ pub const Renderer = struct {
             passed_values[i] = try self.eval(assignment.expr, r.line);
         }
 
+        if (r.loop) |loop| {
+            const iterable = try self.eval(loop.iterable, r.line);
+            const items = try value.iterate(self.arena, iterable);
+
+            for (items) |item| {
+                try self.renderRenderOnce(
+                    unit,
+                    r,
+                    passed_values,
+                    loop.target,
+                    item,
+                );
+            }
+        } else {
+            try self.renderRenderOnce(unit, r, passed_values, null, null);
+        }
+    }
+
+    pub fn renderRenderOnce(
+        self: *Renderer,
+        unit: *Unit,
+        r: ast.Render,
+        passed_values: []const Value,
+        loop_target: ?[]const u8,
+        loop_item: ?Value,
+    ) Error!void {
         const saved_ctx = self.context;
         const saved_self = self.self_ns;
         defer {
@@ -727,7 +803,12 @@ pub const Renderer = struct {
         self.context = .{ .map = .{ .pairs = &.{} } };
         self.self_ns = null;
 
-        var child_frame = try self.newFrame();
+        const child_frame = try self.newFrame();
+
+        if (loop_target) |target| {
+            try child_frame.put(self.arena, target, loop_item.?);
+        }
+
         for (r.assignments, passed_values) |assignment, passed_value| {
             switch (assignment.target) {
                 .name => |key| try child_frame.put(self.arena, key, passed_value),
@@ -805,7 +886,7 @@ pub const Renderer = struct {
         const result = self.renderNodes(body);
         self.out = saved_out;
         self.out.written = sink.written;
-        result  catch |err| return self.failInTemplate(impl.template_name, err);
+        result catch |err| return self.failInTemplate(impl.template_name, err);
 
         return .{ .string = .{ .bytes = aw.written(), .safe = self.opts.autoescape } };
     }
@@ -926,6 +1007,29 @@ pub const Renderer = struct {
             return;
         }
         try self.runLoop(f, items, 0);
+    }
+
+    pub fn renderWhile(self: *Renderer, w: ast.While) Error!void {
+        const saved_loop_depth = self.loop_depth;
+        self.loop_depth += 1;
+        defer self.loop_depth = saved_loop_depth;
+
+        var iterations: usize = 0;
+        while (true) {
+            if (!try self.truthy(w.cond, w.line)) return;
+            if (iterations >= self.opts.max_while_iterations) {
+                return self.fail(w.line, "`while` loop exceeded {d} iterations", .{
+                    self.opts.max_while_iterations,
+                }, error.LoopLimitExceeded);
+            }
+            iterations += 1;
+
+            self.renderNodes(w.body) catch |err| switch (err) {
+                error.LoopContinue => continue,
+                error.LoopBreak => return,
+                else => return err,
+            };
+        }
     }
 
     /// One level of a loop. `depth` is non-zero only for a `recursive` loop
@@ -1364,6 +1468,7 @@ pub const Renderer = struct {
             },
             .loop => |l| return self.loopAttr(l, name),
             .macro => |m| return self.macroAttr(m, name),
+            .tuple => |t| return args_mod.groupAttr(t, name) orelse .{ .undef = .{ .name = name } },
             else => return .{ .undef = .{ .name = name } },
         }
     }

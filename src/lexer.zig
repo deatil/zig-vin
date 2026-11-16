@@ -1,6 +1,25 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+pub const Error = error{
+    OutOfMemory,
+    TemplateSyntaxError,
+};
+
+pub const Delimiters = struct {
+    /// Delimiters for `{{ ... }}` output tags.
+    output_left: []const u8 = "{{",
+    output_right: []const u8 = "}}",
+
+    /// Delimiters for `{% ... %}` statement tags.
+    statement_left: []const u8 = "{%",
+    statement_right: []const u8 = "%}",
+
+    /// Delimiters for `{# ... #}` comment tags.
+    comment_left: []const u8 = "{#",
+    comment_right: []const u8 = "#}",
+};
+
 pub const Options = struct {
     /// Remove the first newline after a *statement* or comment tag (never after
     /// an output tag — that asymmetry is the reference implementation's).
@@ -11,11 +30,8 @@ pub const Options = struct {
     /// Keep the single trailing newline that a template file almost always
     /// ends with. Off by default, matching the reference.
     keep_trailing_newline: bool = false,
-};
-
-pub const Error = error{
-    OutOfMemory,
-    TemplateSyntaxError,
+    /// Custom left/right tag delimiters. Empty entries fall back to defaults.
+    delimiters: Delimiters = .{},
 };
 
 pub const Kind = enum {
@@ -100,7 +116,12 @@ pub fn lex(arena: Allocator, source: []const u8, opts: Options, diag: *Diagnosti
     var l: Lexer = .{
         .arena = arena,
         .src = source,
-        .opts = opts,
+        .opts = .{
+            .trim_blocks = opts.trim_blocks,
+            .lstrip_blocks = opts.lstrip_blocks,
+            .keep_trailing_newline = opts.keep_trailing_newline,
+            .delimiters = normalizeDelimiters(opts.delimiters),
+        },
         .diag = diag,
     };
     if (!opts.keep_trailing_newline) {
@@ -139,7 +160,7 @@ const Lexer = struct {
     fn run(self: *Lexer) Error!void {
         while (self.pos < self.src.len) {
             const start = self.pos;
-            const next = findTagStart(self.src, self.pos);
+            const next = findTagStart(self.src, self.pos, self.opts.delimiters);
             if (next == null) {
                 try self.pushText(self.src[start..]);
                 self.pos = self.src.len;
@@ -148,11 +169,15 @@ const Lexer = struct {
             const at = next.?;
             if (at > start) try self.pushText(self.src[start..at]);
             self.pos = at;
-            switch (self.src[at + 1]) {
-                '#' => try self.lexComment(),
-                '{' => try self.lexTag(false),
-                '%' => try self.lexTag(true),
-                else => unreachable,
+
+            if (matchesAt(self.src, at, self.opts.delimiters.comment_left)) {
+                try self.lexComment();
+            } else if (matchesAt(self.src, at, self.opts.delimiters.output_left)) {
+                try self.lexTag(false);
+            } else if (matchesAt(self.src, at, self.opts.delimiters.statement_left)) {
+                try self.lexTag(true);
+            } else {
+                unreachable;
             }
         }
     }
@@ -169,7 +194,10 @@ const Lexer = struct {
     /// `{# … #}` — dropped entirely, but its whitespace control still applies
     /// to the text on both sides.
     fn lexComment(self: *Lexer) Error!void {
-        var p = self.pos + 2;
+        const left = self.opts.delimiters.comment_left;
+        const right = self.opts.delimiters.comment_right;
+
+        var p = self.pos + left.len;
         var strip_before = false;
         var plus_before = false;
         if (p < self.src.len and self.src[p] == '-') {
@@ -179,10 +207,12 @@ const Lexer = struct {
             plus_before = true;
             p += 1;
         }
-        const end = std.mem.findPos(u8, self.src, p, "#}") orelse return self.fail("unclosed comment");
+
+        const end = std.mem.findPos(u8, self.src, p, right) orelse return self.fail("unclosed comment");
         var body_end = end;
         var strip_after = false;
         var plus_after = false;
+
         if (body_end > p and self.src[body_end - 1] == '-') {
             strip_after = true;
             body_end -= 1;
@@ -190,6 +220,7 @@ const Lexer = struct {
             plus_after = true;
             body_end -= 1;
         }
+
         try self.marks.append(self.arena, .{
             .before = self.priorText(),
             .after = self.pieces.items.len,
@@ -199,13 +230,17 @@ const Lexer = struct {
             .strip_after = strip_after,
             .plus_after = plus_after,
         });
-        self.countLines(self.src[self.pos .. end + 2]);
-        self.pos = end + 2;
+        self.countLines(self.src[self.pos .. end + right.len]);
+        self.pos = end + right.len;
     }
 
     fn lexTag(self: *Lexer, block: bool) Error!void {
         const tag_line = self.line;
-        var p = self.pos + 2;
+        const delims = self.opts.delimiters;
+        const left = if (block) delims.statement_left else delims.output_left;
+        const right = if (block) delims.statement_right else delims.output_right;
+
+        var p = self.pos + left.len;
         var strip_before = false;
         var plus_before = false;
         if (p < self.src.len and self.src[p] == '-') {
@@ -222,32 +257,23 @@ const Lexer = struct {
         var plus_after = false;
 
         while (true) {
-            // whitespace
             while (p < self.src.len and isSpace(self.src[p])) : (p += 1) {
                 if (self.src[p] == '\n') self.line += 1;
             }
             if (p >= self.src.len) return self.fail("unclosed tag");
 
-            const c = self.src[p];
-            // tag end?
             if (depth == 0) {
-                if ((c == '-' or c == '+') and p + 2 < self.src.len and
-                    ((block and self.src[p + 1] == '%' and self.src[p + 2] == '}') or
-                        (!block and self.src[p + 1] == '}' and self.src[p + 2] == '}')))
-                {
-                    if (c == '-') strip_after = true else plus_after = true;
-                    p += 3;
+                if (tagEndsRightWithSign(self.src, p, right)) |sign| {
+                    if (sign == '-') strip_after = true else if (sign == '+') plus_after = true;
+                    p += right.len + 1;
                     break;
                 }
-                if (block and c == '%' and p + 1 < self.src.len and self.src[p + 1] == '}') {
-                    p += 2;
-                    break;
-                }
-                if (!block and c == '}' and p + 1 < self.src.len and self.src[p + 1] == '}') {
-                    p += 2;
+                if (tagEndsRight(self.src, p, right)) {
+                    p += right.len;
                     break;
                 }
             }
+
             const tok = try self.lexToken(&p, &depth);
             try toks.append(self.arena, tok);
         }
@@ -255,7 +281,6 @@ const Lexer = struct {
         self.pos = p;
         const before = self.priorText();
 
-        // `{% raw %}` swallows its body verbatim.
         if (block and toks.items.len == 1 and toks.items[0].isName("raw")) {
             try self.lexRaw(tag_line, before, strip_before, plus_before, strip_after, plus_after);
             return;
@@ -287,11 +312,15 @@ const Lexer = struct {
         open_strip_after: bool,
         open_plus_after: bool,
     ) Error!void {
+        const left = self.opts.delimiters.statement_left;
+        const right = self.opts.delimiters.statement_right;
+
         var scan = self.pos;
         while (true) {
-            const open = std.mem.findPos(u8, self.src, scan, "{%") orelse
+            const open = std.mem.findPos(u8, self.src, scan, left) orelse
                 return self.fail("unclosed {% raw %}");
-            var q = open + 2;
+            var q = open + left.len;
+
             var strip_before = false;
             var plus_before = false;
             if (q < self.src.len and (self.src[q] == '-' or self.src[q] == '+')) {
@@ -300,12 +329,14 @@ const Lexer = struct {
                 q += 1;
             }
             while (q < self.src.len and isSpace(self.src[q])) q += 1;
+
             if (!std.mem.startsWith(u8, self.src[q..], "endraw")) {
-                scan = open + 2;
+                scan = open + left.len;
                 continue;
             }
             q += "endraw".len;
             while (q < self.src.len and isSpace(self.src[q])) q += 1;
+
             var strip_after = false;
             var plus_after = false;
             if (q < self.src.len and (self.src[q] == '-' or self.src[q] == '+')) {
@@ -313,13 +344,15 @@ const Lexer = struct {
                 plus_after = self.src[q] == '+';
                 q += 1;
             }
-            if (!std.mem.startsWith(u8, self.src[q..], "%}")) return self.fail("malformed {% endraw %}");
-            q += 2;
+
+            if (!std.mem.startsWith(u8, self.src[q..], right)) return self.fail("malformed {% endraw %}");
+            q += right.len;
 
             const body = self.src[self.pos..open];
             const body_idx = self.pieces.items.len;
             try self.pieces.append(self.arena, .{ .chunk = .{ .text = body }, .line = tag_line });
             self.countLines(self.src[self.pos..q]);
+
             try self.marks.append(self.arena, .{
                 .before = open_before,
                 .after = body_idx,
@@ -338,6 +371,7 @@ const Lexer = struct {
                 .strip_after = strip_after,
                 .plus_after = plus_after,
             });
+
             self.pos = q;
             return;
         }
@@ -551,16 +585,46 @@ fn isSpace(c: u8) bool {
     return c == ' ' or c == '\t' or c == '\r' or c == '\n';
 }
 
+fn normalizeDelimiters(delims: Delimiters) Delimiters {
+    var out = delims;
+    if (out.output_left.len == 0) out.output_left = "{{";
+    if (out.output_right.len == 0) out.output_right = "}}";
+    if (out.statement_left.len == 0) out.statement_left = "{%";
+    if (out.statement_right.len == 0) out.statement_right = "%}";
+    if (out.comment_left.len == 0) out.comment_left = "{#";
+    if (out.comment_right.len == 0) out.comment_right = "#}";
+    return out;
+}
+
+fn matchesAt(src: []const u8, pos: usize, delim: []const u8) bool {
+    return pos + delim.len <= src.len and std.mem.eql(u8, src[pos .. pos + delim.len], delim);
+}
+
+fn tagEndsRight(src: []const u8, p: usize, right: []const u8) bool {
+    return p + right.len <= src.len and std.mem.eql(u8, src[p .. p + right.len], right);
+}
+
+fn tagEndsRightWithSign(src: []const u8, p: usize, right: []const u8) ?u8 {
+    if (p + right.len + 1 <= src.len and (src[p] == '-' or src[p] == '+') and
+        std.mem.eql(u8, src[p + 1 .. p + 1 + right.len], right))
+    {
+        return src[p];
+    }
+    return null;
+}
+
 /// Index of the next `{{`, `{%` or `{#`. `{` alone, and `{` followed by
 /// anything else, is ordinary text.
-fn findTagStart(src: []const u8, from: usize) ?usize {
+fn findTagStart(src: []const u8, from: usize, delims: Delimiters) ?usize {
     var i = from;
-    while (i + 1 < src.len) : (i += 1) {
-        if (src[i] != '{') continue;
-        switch (src[i + 1]) {
-            '{', '%', '#' => return i,
-            else => {},
+    while (i < src.len) : (i += 1) {
+        if (matchesAt(src, i, delims.output_left) or
+            matchesAt(src, i, delims.statement_left) or
+            matchesAt(src, i, delims.comment_left))
+        {
+            return i;
         }
     }
+
     return null;
 }

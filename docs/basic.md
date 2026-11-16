@@ -1,27 +1,3 @@
-## Vin docs
-
-```zig
-var env = try vin.Environment.init(gpa, .{});
-defer env.deinit();
-
-var tmpl = try env.compile(
-    \\interface {{ name }}
-    \\{%- for v in vlans %}
-    \\ switchport trunk allowed vlan add {{ v }}
-    \\{%- endfor %}
-, null);
-defer tmpl.deinit();
-
-var arena: std.heap.ArenaAllocator = .init(gpa);
-defer arena.deinit();
-const ctx = try vin.valueFrom(arena.allocator(), .{
-    .name = "Gi1/0/1",
-    .vlans = [_]u16{ 10, 20, 30 },
-});
-const out = try tmpl.render(gpa, ctx, null);
-defer gpa.free(out);
-```
-
 ## What is covered
 
 `{{ … }}`, `{# … #}`, `{% if/elif/else %}`, `{% for %}` (with the full
@@ -55,15 +31,16 @@ is worse than a failed render, so the default is inverted deliberately. Pass
 a file extension (this module has no file loader), and `|safe`/`|escape`
 behave as markupsafe's `Markup` does in both settings.
 
-# Desc
+# Tags
 
 A Jinja2-compatible template engine in pure Zig. It takes a template string and
 a context value and produces bytes: `{{ expression }}` output, `{# comments #}`,
 `{% if %}` / `{% for %}` / `{% set %}` / `{% filter %}` / `{% with %}` /
 `{% do %}` / `{% raw %}` statements, template composition (`{% extends %}` +
-`{% block %}` with `super()`, `scoped` and `required`; `{% include %}`;
-`{% import %}` / `{% from … import … %}`; `{% macro %}` and `{% call %}` /
-`caller()`), the full Jinja expression grammar (chained comparisons, conditional
+`{% block %}` with `super()`, `scoped` and `required`; `{% include %}`; `{% includes %}`; 
+`{% ifchanged %}`; `{% case … when … %}`; `{% import %}` / `{% from … import … %}`; 
+`{% increment %}`; `{% decrement %}`; `{% macro %}` and `{% call %}` / `caller()`), 
+the full Jinja expression grammar (chained comparisons, conditional
 expressions, slices, list/dict literals, filters, tests and method calls), 46
 built-in filters, 29 built-in tests, the complete `loop` object including
 `{% for … recursive %}`, `namespace()`, and every whitespace control the
@@ -100,36 +77,6 @@ const ctx: vin.Value = .{ .map = .{ .pairs = &.{
 Maps are **ordered pair slices**, so the order you supply keys in is the order
 `{% for k in d %}` walks them and `{{ d }}` prints them.
 
-### Using it with the `yaml` module
-
-`vin` deliberately depends on nothing but std. A context
-from `modules/yaml` is a twenty-line conversion, and ordering survives it
-because both sides keep mappings as ordered pairs:
-
-```zig
-fn fromYaml(arena: std.mem.Allocator, v: yaml.Value) !vin.Value {
-    return switch (v) {
-        .null => .none,
-        .bool => |b| .{ .boolean = b },
-        .int => |i| .{ .integer = i },
-        .float => |f| .{ .float = f },
-        .string => |s| vin.Value.fromString(s),
-        .sequence => |seq| blk: {
-            const items = try arena.alloc(vin.Value, seq.len);
-            for (seq, 0..) |e, i| items[i] = try fromYaml(arena, e);
-            break :blk .{ .list = items };
-        },
-        .mapping => |m| blk: {
-            const pairs = try arena.alloc(vin.Pair, m.len);
-            for (m, 0..) |p, i| pairs[i] = .{
-                .key = try fromYaml(arena, p.key),
-                .value = try fromYaml(arena, p.value),
-            };
-            break :blk .{ .map = .{ .pairs = pairs } };
-        },
-    };
-}
-```
 
 ## Options
 
@@ -140,6 +87,7 @@ fn fromYaml(arena: std.mem.Allocator, v: yaml.Value) !vin.Value {
 | `trim_blocks` | `false` | Drop the first newline after a statement or comment tag. |
 | `lstrip_blocks` | `false` | Strip leading whitespace from line start to a statement or comment tag. |
 | `keep_trailing_newline` | `false` | Keep the template's final newline. |
+| `delimiters` | default | Optional custom tag delimiters. |
 | `max_output_bytes` | 64 MiB | Ceiling on rendered output; a runaway loop fails loudly. |
 | `max_template_depth` | 32 | Combined `{% extends %}`/`{% include %}`/`{% import %}` nesting bound. |
 | `max_call_depth` | 64 | Macro, `{% call %}` and `loop()` recursion bound. |
@@ -191,7 +139,7 @@ ip routing
 
 Supported in full: multi-level `{% extends %}` chains with a computed
 (non-literal) parent name, `{% block %}` with `super()`, nesting, `scoped` and
-`required`, `{{ self.blockname() }}`, `{% include %}` with `ignore missing`,
+`required`, `{{ self.blockname() }}`, `{% include %}` and `{% includes %}` with `ignore missing`,
 `with`/`without context` and a list of candidates, `{% import %}` and
 `{% from … import … as … %}`, `{% macro %}` with defaults, `varargs`, `kwargs`
 and the `name`/`arguments`/`catch_varargs`/`catch_kwargs`/`caller` introspection

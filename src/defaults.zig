@@ -1,4 +1,5 @@
 const std = @import("std");
+const ascii = std.ascii;
 const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
 
@@ -9,24 +10,24 @@ const lexer = @import("lexer.zig");
 const parsers = @import("parser.zig");
 const renders = @import("render.zig");
 
+const Ctx = args_mod.Ctx;
+const Args = args_mod.Args;
+const Value = value.Value;
+const Error = value.Error;
+
 const FilterEntry = struct { name: []const u8, func: args_mod.FilterFn };
 const TestEntry = struct { name: []const u8, func: args_mod.TestFn };
 const GlobalEntry = struct { name: []const u8, func: args_mod.GlobalFn };
 const MethodEntry = struct { name: []const u8, func: args_mod.MethodFn };
 const TagEntry = struct { name: []const u8, func: parsers.TagFn };
 
-const Ctx = args_mod.Ctx;
-const Args = args_mod.Args;
-const Value = value.Value;
-const Error = value.Error;
-
 fn titleMethod(ctx: *Ctx, input: Value) Error!Value {
     const s = try ctx.toStr(input);
     const out = try ctx.arena.dupe(u8, s);
     var at_start = true;
     for (out) |*c| {
-        const alpha = std.ascii.isAlphabetic(c.*);
-        c.* = if (at_start) std.ascii.toUpper(c.*) else std.ascii.toLower(c.*);
+        const alpha = ascii.isAlphabetic(c.*);
+        c.* = if (at_start) ascii.toUpper(c.*) else ascii.toLower(c.*);
         at_start = !alpha;
     }
     return args_mod.markupAware(ctx, input, out);
@@ -36,7 +37,7 @@ fn fUpper(ctx: *Ctx, input: Value, args: Args) Error!Value {
     _ = args;
     const s = try ctx.toStr(input);
     const out = try ctx.arena.dupe(u8, s);
-    for (out) |*c| c.* = std.ascii.toUpper(c.*);
+    for (out) |*c| c.* = ascii.toUpper(c.*);
     return args_mod.markupAware(ctx, input, out);
 }
 
@@ -44,7 +45,7 @@ fn fLower(ctx: *Ctx, input: Value, args: Args) Error!Value {
     _ = args;
     const s = try ctx.toStr(input);
     const out = try ctx.arena.dupe(u8, s);
-    for (out) |*c| c.* = std.ascii.toLower(c.*);
+    for (out) |*c| c.* = ascii.toLower(c.*);
     return args_mod.markupAware(ctx, input, out);
 }
 
@@ -52,7 +53,7 @@ fn fCapitalize(ctx: *Ctx, input: Value, args: Args) Error!Value {
     _ = args;
     const s = try ctx.toStr(input);
     const out = try ctx.arena.dupe(u8, s);
-    for (out, 0..) |*c, i| c.* = if (i == 0) std.ascii.toUpper(c.*) else std.ascii.toLower(c.*);
+    for (out, 0..) |*c, i| c.* = if (i == 0) ascii.toUpper(c.*) else ascii.toLower(c.*);
     return args_mod.markupAware(ctx, input, out);
 }
 
@@ -64,7 +65,7 @@ fn fTitle(ctx: *Ctx, input: Value, args: Args) Error!Value {
     for (out, 0..) |*c, i| {
         const boundary = args_mod.isTitleBoundary(c.*);
         const transition = i == 0 or boundary != prev_boundary;
-        c.* = if (transition) std.ascii.toUpper(c.*) else std.ascii.toLower(c.*);
+        c.* = if (transition) ascii.toUpper(c.*) else ascii.toLower(c.*);
         prev_boundary = boundary;
     }
     return Value.fromString(out);
@@ -224,7 +225,7 @@ fn fWordcount(ctx: *Ctx, input: Value, args: Args) Error!Value {
     var n: i64 = 0;
     var in_word = false;
     for (s) |c| {
-        const word = std.ascii.isAlphanumeric(c) or c == '_' or c >= 0x80;
+        const word = ascii.isAlphanumeric(c) or c == '_' or c >= 0x80;
         if (word and !in_word) n += 1;
         in_word = word;
     }
@@ -379,7 +380,7 @@ fn quoteIntoQs(ctx: *Ctx, out: *std.ArrayList(u8), s: []const u8, extra_safe: []
             try out.append(ctx.arena, '+');
             continue;
         }
-        const unreserved = std.ascii.isAlphanumeric(c) or c == '_' or c == '.' or c == '-' or c == '~' or
+        const unreserved = ascii.isAlphanumeric(c) or c == '_' or c == '.' or c == '-' or c == '~' or
             std.mem.findScalar(u8, extra_safe, c) != null;
         if (unreserved) {
             try out.append(ctx.arena, c);
@@ -444,7 +445,7 @@ fn fInt(ctx: *Ctx, input: Value, args: Args) Error!Value {
         .string => |s| blk: {
             const t = std.mem.trim(u8, s.bytes, " \t\r\n");
             if (base) |b| {
-                const strip = b != 0 and b != 10 and t.len > 2 and t[0] == '0' and !std.ascii.isDigit(t[1]);
+                const strip = b != 0 and b != 10 and t.len > 2 and t[0] == '0' and !ascii.isDigit(t[1]);
                 const stripped = if (strip) t[2..] else t;
                 if (std.fmt.parseInt(i64, stripped, b)) |v| break :blk .{ .integer = v } else |_| {}
             }
@@ -824,7 +825,7 @@ fn sortKeys(ctx: *Ctx, items: []const Value, attribute: ?Value, case_sensitive: 
                     keys[i].text = s.bytes;
                 } else {
                     const low = try ctx.arena.dupe(u8, s.bytes);
-                    for (low) |*c| c.* = std.ascii.toLower(c.*);
+                    for (low) |*c| c.* = ascii.toLower(c.*);
                     keys[i].text = low;
                 }
             },
@@ -885,7 +886,7 @@ fn fUnique(ctx: *Ctx, input: Value, args: Args) Error!Value {
         var key = if (attribute != null and attribute.? != .none) try args_mod.attrOf(ctx, it, attribute.?) else it;
         if (!case_sensitive and key == .string) {
             const low = try ctx.arena.dupe(u8, key.string.bytes);
-            for (low) |*c| c.* = std.ascii.toLower(c.*);
+            for (low) |*c| c.* = ascii.toLower(c.*);
             key = Value.fromString(low);
         }
         var dup = false;
@@ -1072,7 +1073,7 @@ fn jsonWrite(ctx: *Ctx, w: *Writer, v: Value, indent: ?usize, depth: usize) Erro
             if (pairs.len != 0 and indent != null) try jsonSep(w, indent, depth, true);
             w.writeAll("}") catch return error.OutOfMemory;
         },
-        .loop, .macro, .callable, .caller => return error.BadArgument,
+        else => return error.BadArgument,
     }
 }
 
@@ -1175,7 +1176,7 @@ fn fFilesizeformat(ctx: *Ctx, input: Value, args: Args) Error!Value {
 
     var size: f64 = @floatFromInt(bytes);
 
-    const units: [6][]const u8 = .{ "bytes", "KB", "MB", "GB", "TB", "PB" };
+    const units: [9][]const u8 = .{ "bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB" };
     var unit_idx: usize = 0;
 
     while (size >= 1024 and (unit_idx < units.len - 1)) {
@@ -1203,6 +1204,61 @@ fn fFilesizeformat(ctx: *Ctx, input: Value, args: Args) Error!Value {
     }
 
     return .fromString(result);
+}
+
+fn groupLess(keys: []const Value, a: usize, b: usize) bool {
+    return value.compare(.lt, keys[a], keys[b]) catch false;
+}
+
+fn fGroupby(ctx: *Ctx, input: Value, args: Args) Error!Value {
+    const items = try args_mod.seq(ctx, input);
+    const attr = args.get(0, "attribute") orelse return error.BadArgument;
+    const dflt: Value = args.get(1, "default") orelse .none;
+    const case_sensitive = args_mod.boolArg(args, 2, "case_sensitive", false);
+
+    const keys = try ctx.arena.alloc(Value, items.len);
+
+    const raw = try ctx.arena.alloc(Value, items.len);
+    for (items, 0..) |it, i| {
+        var k = try args_mod.attrOf(ctx, it, attr);
+        if (k == .undef) k = dflt;
+        raw[i] = k;
+        if (!case_sensitive and k == .string) {
+            const sb = ascii.allocLowerString(ctx.arena, k.string.bytes) catch return error.BadArgument;
+            k = Value.fromString(sb);
+        }
+        keys[i] = k;
+    }
+
+    if (keys.len > 1) {
+        const numeric = keys[0] == .integer or keys[0] == .float or keys[0] == .boolean;
+        for (keys) |k| {
+            const n = k == .integer or k == .float or k == .boolean;
+            if (numeric) {
+                if (!n) return error.TypeMismatch;
+            } else if (keys[0] != .string or k != .string) return error.TypeMismatch;
+        }
+    }
+
+    const order = try ctx.arena.alloc(usize, items.len);
+    for (order, 0..) |*o, i| o.* = i;
+    std.sort.block(usize, order, keys, groupLess);
+
+    var out: std.ArrayList(Value) = .empty;
+    var i: usize = 0;
+    while (i < order.len) {
+        var j = i + 1;
+        while (j < order.len and value.valueEql(keys[order[i]], keys[order[j]])) j += 1;
+        const members = try ctx.arena.alloc(Value, j - i);
+        for (members, order[i..j]) |*m, idx| m.* = items[idx];
+        const pair = try ctx.arena.alloc(Value, 2);
+        pair[0] = raw[order[i]];
+        pair[1] = .{ .list = members };
+        try out.append(ctx.arena, .{ .tuple = pair });
+        i = j;
+    }
+
+    return .{ .list = out.items };
 }
 
 pub const builtin_filters = [_]FilterEntry{
@@ -1254,6 +1310,7 @@ pub const builtin_filters = [_]FilterEntry{
     .{ .name = "xmlattr", .func = fXmlattr },
     .{ .name = "yesno", .func = fYesno },
     .{ .name = "filesizeformat", .func = fFilesizeformat },
+    .{ .name = "groupby", .func = fGroupby },
 };
 
 // tests 
@@ -1355,8 +1412,8 @@ fn tUpperTest(ctx: *Ctx, input: Value, args: Args) Error!bool {
     const s = try ctx.toStr(input);
     var has_alpha = false;
     for (s) |c| {
-        if (std.ascii.isAlphabetic(c)) has_alpha = true;
-        if (std.ascii.isLower(c)) return false;
+        if (ascii.isAlphabetic(c)) has_alpha = true;
+        if (ascii.isLower(c)) return false;
     }
     return has_alpha;
 }
@@ -1365,8 +1422,8 @@ fn tLowerTest(ctx: *Ctx, input: Value, args: Args) Error!bool {
     const s = try ctx.toStr(input);
     var has_alpha = false;
     for (s) |c| {
-        if (std.ascii.isAlphabetic(c)) has_alpha = true;
-        if (std.ascii.isUpper(c)) return false;
+        if (ascii.isAlphabetic(c)) has_alpha = true;
+        if (ascii.isUpper(c)) return false;
     }
     return has_alpha;
 }
@@ -1606,12 +1663,12 @@ fn stringMethod(ctx: *Ctx, input: Value, name: []const u8, args: Args) Error!Val
     }
     if (std.mem.eql(u8, name, "isdigit")) {
         if (s.bytes.len == 0) return .{ .boolean = false };
-        for (s.bytes) |c| if (!std.ascii.isDigit(c)) return .{ .boolean = false };
+        for (s.bytes) |c| if (!ascii.isDigit(c)) return .{ .boolean = false };
         return .{ .boolean = true };
     }
     if (std.mem.eql(u8, name, "isalpha")) {
         if (s.bytes.len == 0) return .{ .boolean = false };
-        for (s.bytes) |c| if (!std.ascii.isAlphabetic(c)) return .{ .boolean = false };
+        for (s.bytes) |c| if (!ascii.isAlphabetic(c)) return .{ .boolean = false };
         return .{ .boolean = true };
     }
     if (std.mem.eql(u8, name, "removeprefix")) {
@@ -1767,7 +1824,7 @@ const IncrementCtx = struct {
         const ctx_name = r.arena.print("__vin_increment_{s}", .{self.name}) catch return error.TemplateSyntaxError;
         
         var next: Value = undefined;
-        if (r.context_values.get(ctx_name)) |old| {
+        if (r.environments.get(ctx_name)) |old| {
             if (old == .integer) {
                 next = Value.fromInt(old.integer + 1);
             } else {
@@ -1777,14 +1834,14 @@ const IncrementCtx = struct {
             next = Value.fromInt(0);
         }
 
-        r.context_values.put(r.arena, ctx_name, next) catch return error.TemplateSyntaxError;
+        r.environments.put(r.arena, ctx_name, next) catch return error.TemplateSyntaxError;
         r.emit(next, 0) catch return error.TemplateSyntaxError;
 
         return &.{};
     }
 };
 
-fn tagIncrementFn(
+fn tagIncrement(
     parser: *parsers.Parser,
     rest: []const lexer.Token,
     line: usize,
@@ -1819,7 +1876,7 @@ const DecrementCtx = struct {
         const ctx_name = r.arena.print("__vin_decrement_{s}", .{self.name}) catch return error.TemplateSyntaxError;
 
         var next: Value = undefined;
-        if (r.context_values.get(ctx_name)) |old| {
+        if (r.environments.get(ctx_name)) |old| {
             if (old == .integer) {
                 next = Value.fromInt(old.integer - 1);
             } else {
@@ -1829,14 +1886,14 @@ const DecrementCtx = struct {
             next = Value.fromInt(-1);
         }
 
-        r.context_values.put(r.arena, ctx_name, next) catch return error.TemplateSyntaxError;
+        r.environments.put(r.arena, ctx_name, next) catch return error.TemplateSyntaxError;
         r.emit(next, 0) catch return error.TemplateSyntaxError;
 
         return &.{};
     }
 };
 
-fn tagDecrementFn(
+fn tagDecrement(
     parser: *parsers.Parser,
     rest: []const lexer.Token,
     line: usize,
@@ -1861,7 +1918,166 @@ fn tagDecrementFn(
     try out.append(parser.arena, .{ .generic = def.* });
 }
 
+const IfChangedCtx = struct {
+    exprs: []const *const ast.Expr = &.{},
+    body: []const ast.Node = &.{},
+    else_body: []const ast.Node = &.{},
+    line: usize = 0,
+
+    fn previousValue(r: *renders.Renderer, key: []const u8) ?Value {
+        const stored = r.resolve(key);
+        if (stored != .tuple) return null;
+
+        const pair = stored.tuple;
+        if (pair.len != 2 or pair[0] != .boolean or !pair[0].boolean) return null;
+        return pair[1];
+    }
+
+    fn saveValue(
+        r: *renders.Renderer,
+        key: []const u8,
+        current: Value,
+        line: usize,
+    ) ast.Error!void {
+        const pair = r.arena.alloc(Value, 2) catch return error.TemplateSyntaxError;
+        pair[0] = .{ .boolean = true };
+        pair[1] = current;
+
+        r.assign(.{ .name = key }, .{ .tuple = pair }, line) catch
+            return error.TemplateSyntaxError;
+    }
+
+    fn renderNodesToOwned(
+        r: *renders.Renderer,
+        nodes: []const ast.Node,
+    ) ast.Error![]const u8 {
+        var aw: Writer.Allocating = .init(r.arena);
+        var sub: renders.Counting = .{
+            .inner = &aw.writer,
+            .limit = r.out.limit,
+            .written = r.out.written,
+        };
+
+        const saved_out = r.out;
+        r.out = &sub;
+        r.renderNodes(nodes) catch {
+            r.out = saved_out;
+            return error.TemplateSyntaxError;
+        };
+        r.out = saved_out;
+
+        return aw.written();
+    }
+
+    fn renderFn(ctx: *const anyopaque, render: *anyopaque) ast.Error![]const ast.Node {
+        const self: *const IfChangedCtx = @ptrCast(@alignCast(ctx));
+        var r: *renders.Renderer = @ptrCast(@alignCast(render));
+
+        if (r.loop_depth == 0) return error.TemplateSyntaxError;
+
+        const key = r.arena.print(
+            "__vin_ifchanged_{d}_{d}",
+            .{ self.line, @intFromPtr(self) },
+        ) catch return error.TemplateSyntaxError;
+
+        var current: Value = undefined;
+
+        if (self.exprs.len == 0) {
+            const rendered = try renderNodesToOwned(r, self.body);
+            current = .{ .string = .{
+                .bytes = rendered,
+                .safe = r.opts.autoescape,
+            } };
+
+            const previous = previousValue(r, key);
+            const changed = previous == null or !value.valueEql(previous.?, current);
+            try saveValue(r, key, current, self.line);
+
+            if (changed) {
+                const result = r.arena.alloc(ast.Node, 1) catch return error.TemplateSyntaxError;
+                result[0] = .{ .text = rendered };
+                return result;
+            }
+
+            return self.else_body;
+        }
+
+        const values = r.arena.alloc(Value, self.exprs.len) catch
+            return error.TemplateSyntaxError;
+
+        for (self.exprs, 0..) |expr, i| {
+            values[i] = r.eval(expr, self.line) catch
+                return error.TemplateSyntaxError;
+        }
+
+        current = if (values.len == 1) values[0] else .{ .tuple = values };
+
+        const previous = previousValue(r, key);
+        const changed = previous == null or !value.valueEql(previous.?, current);
+        try saveValue(r, key, current, self.line);
+
+        return if (changed) self.body else self.else_body;
+    }
+};
+
+fn tagIfChanged(
+    parser: *parsers.Parser,
+    rest: []const lexer.Token,
+    line: usize,
+    out: *std.ArrayList(ast.Node),
+) parsers.Error!void {
+    var ts: parsers.Stream = .{ .toks = rest, .p = parser };
+    var exprs: std.ArrayList(*const ast.Expr) = .empty;
+
+    while (ts.peek() != null) {
+        try exprs.append(parser.arena, try ts.parseExpression(line, true));
+
+        if (ts.peek() == null) break;
+        if (!ts.eat(.comma)) {
+            return parser.failAt(line, "expected `,` between ifchanged expressions");
+        }
+        if (ts.peek() == null) {
+            return parser.failAt(line, "expected an expression after `,`");
+        }
+    }
+
+    const body = try parser.parseBody(&.{ "else", "endifchanged" });
+    var else_body: []const ast.Node = &.{};
+
+    if (std.mem.eql(u8, body.ended_with, "else")) {
+        if (body.end_toks.len != 0) {
+            return parser.failAt(body.end_line, "unexpected tokens after `else`");
+        }
+
+        const else_state = try parser.parseBody(&.{"endifchanged"});
+        if (else_state.end_toks.len != 0) {
+            return parser.failAt(else_state.end_line, "unexpected tokens after `endifchanged`");
+        }
+        else_body = else_state.nodes;
+    } else if (body.end_toks.len != 0) {
+        return parser.failAt(body.end_line, "unexpected tokens after `endifchanged`");
+    }
+
+    const ctx = try parser.arena.create(IfChangedCtx);
+    ctx.* = .{
+        .exprs = exprs.items,
+        .body = body.nodes,
+        .else_body = else_body,
+        .line = line,
+    };
+
+    const def = try parser.arena.create(ast.Generic);
+    def.* = .{
+        .ctx = ctx,
+        .renderFn = IfChangedCtx.renderFn,
+        .line = line,
+    };
+
+    try out.append(parser.arena, .{ .generic = def.* });
+}
+
 pub const builtin_tags = [_]TagEntry{
-    .{ .name = "increment", .func = tagIncrementFn },
-    .{ .name = "decrement", .func = tagDecrementFn },
+    .{ .name = "increment", .func = tagIncrement },
+    .{ .name = "decrement", .func = tagDecrement },
+    .{ .name = "ifchanged", .func = tagIfChanged },
 };

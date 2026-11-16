@@ -12,13 +12,14 @@ pub const parser = @import("parser.zig");
 pub const renders = @import("render.zig");
 pub const loaders = @import("loader.zig");
 
-pub const Parser = parser.Parser;
-pub const Stream = parser.Stream;
-pub const Token = lexer.Token;
-pub const Renderer = renders.Renderer;
 pub const Expr = ast.Expr;
 pub const Node = ast.Node;
 pub const Generic = ast.Generic;
+pub const Parser = parser.Parser;
+pub const Stream = parser.Stream;
+pub const Token = lexer.Token;
+pub const Delimiters = lexer.Delimiters;
+pub const Renderer = renders.Renderer;
 pub const Value = value.Value;
 pub const Str = value.Str;
 pub const Pair = value.Pair;
@@ -56,6 +57,9 @@ pub const Options = struct {
     trim_blocks: bool = false,
     lstrip_blocks: bool = false,
     keep_trailing_newline: bool = false,
+    /// Optional custom tag delimiters.
+    /// Defaults remain: {{ }}, {% %}, {# #}
+    delimiters: Delimiters = .{},
     max_output_bytes: usize = 64 << 20,
     /// Total bytes one render may take from its scratch arena.
     ///
@@ -76,6 +80,8 @@ pub const Options = struct {
     max_call_depth: usize = 64,
     /// How many distinct templates one render may load.
     max_templates: usize = 256,
+    /// Maximum number of iterations for one `{% while %}` tag.
+    max_while_iterations: usize = 1_000_000,
     /// Bound on how deep one template's syntax may nest: brackets, `not`/unary
     /// chains, `else` arms, each link of a `1+1+1`/`x|f|g`/`a.b.c` chain, each
     /// nested block body and each `{% elif %}`. Enforced at compile time, and
@@ -254,6 +260,7 @@ pub const Environment = struct {
             .trim_blocks = self.options.trim_blocks,
             .lstrip_blocks = self.options.lstrip_blocks,
             .keep_trailing_newline = self.options.keep_trailing_newline,
+            .delimiters = self.options.delimiters,
         }, d) catch |e| return e;
 
         const parsed = try parser.parse(a, lexed.pieces, .{
@@ -392,6 +399,7 @@ pub const Environment = struct {
             .trim_blocks = self.options.trim_blocks,
             .lstrip_blocks = self.options.lstrip_blocks,
             .keep_trailing_newline = self.options.keep_trailing_newline,
+            .delimiters = self.options.delimiters,
         }, diag);
 
         return parser.parse(arena, lexed.pieces, .{
@@ -463,6 +471,7 @@ pub const Template = struct {
             .max_template_depth = self.env.options.max_template_depth,
             .max_call_depth = self.env.options.max_call_depth,
             .max_templates = self.env.options.max_templates,
+            .max_while_iterations = self.env.options.max_while_iterations,
         }, .{
             .ctx = self.env,
             .filter = Environment.filterLookup,
@@ -568,7 +577,6 @@ test {
     _ = @import("args.zig");
     _ = @import("diag.zig");
     _ = @import("engine_test.zig");
-    _ = @import("conform.zig");
     _ = @import("reference_test.zig");
     _ = @import("loader.zig");
     _ = @import("loader_test.zig");

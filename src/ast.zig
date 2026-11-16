@@ -108,6 +108,12 @@ pub const For = struct {
     recursive: bool,
 };
 
+pub const While = struct {
+    cond: *const Expr,
+    body: []const Node,
+    line: usize,
+};
+
 pub const Continue = struct {
     line: usize,
 };
@@ -185,6 +191,14 @@ pub const Include = struct {
     line: usize,
 };
 
+pub const Includes = struct {
+    names: *const Expr,
+    blocks: []const BlockDef,
+    ignore_missing: bool,
+    with_context: bool,
+    line: usize,
+};
+
 pub const Import = struct {
     name: *const Expr,
     /// `{% import 'm' as target %}`
@@ -204,9 +218,15 @@ pub const FromImport = struct {
     line: usize,
 };
 
+pub const RenderLoop = struct {
+    iterable: *const Expr,
+    target: []const u8,
+};
+
 pub const Render = struct {
     name: *const Expr,
     assignments: []const Set = &.{},
+    loop: ?RenderLoop = null,
     line: usize,
 };
 
@@ -230,6 +250,7 @@ pub const Node = union(enum) {
     if_: If,
     case_: Case,
     for_: For,
+    while_: While,
     continue_: Continue,
     break_: Break,
     set: Set,
@@ -245,6 +266,7 @@ pub const Node = union(enum) {
     /// template's block table so the chain can override it.
     block: struct { name: []const u8, line: usize },
     include: Include,
+    includes: Includes,
     import: Import,
     from_import: FromImport,
     render: Render,

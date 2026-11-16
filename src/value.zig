@@ -124,6 +124,27 @@ pub const Loop = struct {
     last_changed: ?[]const Value = null,
 };
 
+/// A missing name, or the result of an operation the reference implementation
+/// answers with `Undefined`. `name` is what the message will blame.
+pub const Undefined = struct {
+    name: []const u8 = "",
+};
+
+/// A macro — a `{% macro %}`, or the body a `{% call %}` block hands to
+/// `caller()` — closed over the scope it was defined in.
+///
+/// The payload is **opaque here on purpose**. A macro necessarily refers to
+/// syntax (`ast`) and to live scopes (`render`), and both of those sit above
+/// this file in the import graph; making `Value` name them would put a cycle at
+/// the very bottom of the module. `render.zig` allocates the implementation and
+/// owns the only casts of `impl`, so the unsafety is one file wide. `name` is
+/// carried in the clear because `repr()` and `macro.name` need it without a
+/// cast.
+pub const MacroRef = struct {
+    name: []const u8,
+    impl: *const anyopaque,
+};
+
 // For value call, have state
 pub const Callable = struct {
     ctx: *anyopaque,
@@ -146,27 +167,6 @@ pub const Caller = struct {
     call: *const fn (ctx: *args.Ctx, args: args.Args) Error!Value,
 };
 
-/// A missing name, or the result of an operation the reference implementation
-/// answers with `Undefined`. `name` is what the message will blame.
-pub const Undefined = struct {
-    name: []const u8 = "",
-};
-
-/// A macro — a `{% macro %}`, or the body a `{% call %}` block hands to
-/// `caller()` — closed over the scope it was defined in.
-///
-/// The payload is **opaque here on purpose**. A macro necessarily refers to
-/// syntax (`ast`) and to live scopes (`render`), and both of those sit above
-/// this file in the import graph; making `Value` name them would put a cycle at
-/// the very bottom of the module. `render.zig` allocates the implementation and
-/// owns the only casts of `impl`, so the unsafety is one file wide. `name` is
-/// carried in the clear because `repr()` and `macro.name` need it without a
-/// cast.
-pub const MacroRef = struct {
-    name: []const u8,
-    impl: *const anyopaque,
-};
-
 pub const Value = union(enum) {
     undef: Undefined,
     none,
@@ -182,9 +182,9 @@ pub const Value = union(enum) {
     map: Map,
     namespace: *Namespace,
     loop: *Loop,
+    macro: MacroRef,
     callable: Callable,
     caller: Caller,
-    macro: MacroRef,
 
     pub const empty_string: Value = .{ .string = .{ .bytes = "" } };
 
@@ -430,8 +430,7 @@ pub const Value = union(enum) {
     /// the question before it reaches here (see render.zig).
     pub fn truthy(self: Value) bool {
         return switch (self) {
-            .undef => false,
-            .none => false,
+            .undef, .none => false,
             .boolean => |b| b,
             .integer => |i| i != 0,
             .float => |f| f != 0.0,
@@ -440,9 +439,7 @@ pub const Value = union(enum) {
             .map => |m| m.pairs.len != 0,
             .namespace => true,
             .loop => |l| l.items.len != 0,
-            .macro => true,
-            .callable => true,
-            .caller => true,
+            else => true,
         };
     }
 

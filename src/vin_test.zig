@@ -1582,3 +1582,124 @@ test "macro template name" {
 
     try testing.expectEqualStrings("<string>", out);
 }
+
+test "include and includes are isolated and nested includes work" {
+    const gpa = testing.allocator;
+
+    var map: vin.MapLoader = .{ .entries = &.{
+        .{
+            .name = "modal",
+            .source = "<{% block header %}H{% endblock %}|{% block body %}B{% endblock %}>",
+        },
+        .{
+            .name = "inner",
+            .source = "[{% block body %}inner-default{% endblock %}]",
+        },
+    } };
+
+    var env = try vin.Environment.initWithLoader(gpa, .{}, map.loader());
+    defer env.deinit();
+
+    const context: vin.Value = .{ .map = .{ .pairs = &.{} } };
+
+    const regular = try env.renderAlloc(
+        "{% include 'modal' %}",
+        context,
+        null,
+    );
+    defer gpa.free(regular);
+    try testing.expectEqualStrings("<H|B>", regular);
+
+    const with_slots = try env.renderAlloc(
+        "{% includes 'modal' %}" ++
+            "{% block header %}head{% endblock %}" ++
+            "{% block body %}x" ++
+            "{% includes 'inner' %}" ++
+            "{% block body %}nested{% endblock %}" ++
+            "{% endincludes %}" ++
+            "y{% endblock %}" ++
+        "{% endincludes %}",
+        context,
+        null,
+    );
+    defer gpa.free(with_slots);
+    try testing.expectEqualStrings("<head|x[nested]y>", with_slots);
+
+    const with_slots2 = try env.renderAlloc(
+        "{% includes 'modal' %}" ++
+            "{% block body %}x" ++
+            "{% includes 'inner' %}" ++
+            "{% endincludes %}" ++
+            "y{% endblock %}" ++
+        "{% endincludes %}",
+        context,
+        null,
+    );
+    defer gpa.free(with_slots2);
+    try testing.expectEqualStrings("<H|x[inner-default]y>", with_slots2);
+}
+
+test "use delimiters options to render template" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{
+        .delimiters = .{
+            .output_left = "<<",
+            .output_right = ">>",
+            .statement_left = "[%",
+            .statement_right = "%]",
+            .comment_left = "[#",
+            .comment_right = "#]",
+        },
+    });
+    defer env.deinit();
+
+    var tpl = try env.compile("[% set items = ['oo', 'pp'] %]Hello << name >>|[# comment data #]|[% for item in items %]- << item >>[% endfor %]", null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .name = "test-yyy",
+    });
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("Hello test-yyy||- oo- pp", out);
+}
+
+test "while loop with break and continue" {
+    const alloc = testing.allocator;
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile(
+        "{% set i = 0 %}{% while i < 5 %}{% set i = i + 1 %}{% if i == 2 %}{% continue %}{% endif %}{% if i == 4 %}{% break %}{% endif %}{{ i }}{% endwhile %}",
+        null,
+    );
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = try tpl.render(alloc, ctx, null);
+    defer alloc.free(out);
+
+    try testing.expectEqualStrings("13", out);
+}
+
+test "while loop iteration limit" {
+    const alloc = testing.allocator;
+
+    var env = try vin.Environment.init(alloc, .{
+        .max_while_iterations = 3,
+    });
+    defer env.deinit();
+
+    var tpl = try env.compile("{% while true %}{% endwhile %}", null);
+    defer tpl.deinit();
+
+    var diag: vin.Diagnostic = undefined;
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = tpl.render(alloc, ctx, &diag);
+
+    try testing.expectError(error.LoopLimitExceeded, out);
+}
