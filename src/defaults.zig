@@ -1274,7 +1274,9 @@ const FormatSpec = struct {
 };
 
 fn fFormat(ctx: *Ctx, input: Value, args: Args) Error!Value {
-    const fmt = try ctx.toStr(input);
+    const new_input = value.escapeValueAlloc(ctx.arena, input) catch return error.BadArgument;
+    const fmt = try ctx.toStr(new_input);
+
     var out: std.ArrayList(u8) = .empty;
     var pos: usize = 0;
     var arg_index: usize = 0;
@@ -1372,7 +1374,7 @@ fn fFormat(ctx: *Ctx, input: Value, args: Args) Error!Value {
     }
 
     if (uses_positional and arg_index != args.pos.len) return error.BadArgument;
-    return .{ .string = .{ .bytes = out.items, .safe = false } };
+    return .{ .string = .{ .bytes = out.items, .safe = true } };
 }
 
 fn nextFormatArg(args: Args, index: *usize) Error!Value {
@@ -1404,11 +1406,15 @@ fn formatField(ctx: *Ctx, v: Value, spec: FormatSpec) ![]const u8 {
 
     switch (spec.conversion) {
         's' => {
-            const s = try ctx.toStr(v);
+            const v2 = value.escapeValueAlloc(ctx.arena, v) catch return error.BadArgument;
+            const s = try ctx.toStr(v2);
             const shown = if (spec.precision) |p| s[0..@min(p, s.len)] else s;
             try aw.writer.writeAll(shown);
         },
-        'r' => try value.reprTo(&aw.writer, v),
+        'r' => {
+            const v2 = value.escapeValueAlloc(ctx.arena, v) catch return error.BadArgument;
+            try value.reprTo(&aw.writer, v2);
+        },
         'c' => {
             const codepoint = try args_mod.intArg(v, 0);
             if (codepoint < 0 or codepoint > 0x10ffff) return error.BadArgument;
@@ -1462,13 +1468,7 @@ fn writeInteger(
     else
         @intCast(n);
 
-    if (negative) {
-        try writer.writeByte('-');
-    } else if (spec.plus) {
-        try writer.writeByte('+');
-    } else if (spec.space) {
-        try writer.writeByte(' ');
-    }
+    try writeSign(writer, negative, spec);
 
     if (spec.alternate) {
         switch (base) {
@@ -1495,12 +1495,6 @@ fn writeInteger(
 
     if (spec.precision) |p| {
         if (p == 0 and magnitude == 0) return;
-        while (len < p) {
-            try writer.writeByte('0');
-            // Precision zero-padding is emitted before the digits below.
-            len += 1;
-        }
-        // Regenerate digits because `len` may have been increased above.
         var raw: [64]u8 = undefined;
         var raw_len: usize = 0;
         x = magnitude;

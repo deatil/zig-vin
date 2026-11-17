@@ -1703,3 +1703,22 @@ test "while loop iteration limit" {
 
     try testing.expectError(error.LoopLimitExceeded, out);
 }
+
+test "value valueEscapeAlloc" {
+    const alloc = testing.allocator;
+
+    {
+        const v: value.Value = .fromString("<b>");
+        const out = try value.valueEscapeAlloc(alloc, v);
+        defer alloc.free(out);
+
+        try testing.expectEqualStrings("&lt;b&gt;", out);
+    }
+    {
+        const v: value.Value = .fromString("abc123");
+        const out = try value.valueEscapeAlloc(alloc, v);
+        defer alloc.free(out);
+
+        try testing.expectEqualStrings("abc123", out);
+    }
+}

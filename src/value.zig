@@ -579,6 +579,33 @@ pub fn escapeAlloc(arena: Allocator, bytes: []const u8) Error![]const u8 {
     return aw.written();
 }
 
+pub fn valueEscapeAlloc(arena: Allocator, v: Value) Error![]const u8 {
+    var aw: Writer.Allocating = .init(arena);
+
+    if (args.isMarkup(v)) {
+        aw.writer.writeAll(v.string.bytes) catch return error.OutOfMemory;
+    } else {
+        if (v == .string) try escapeTo(&aw.writer, v.string.bytes);
+    }
+
+    return aw.toOwnedSlice() catch return error.OutOfMemory;
+}
+
+pub fn escapeValueAlloc(arena: Allocator, v: Value) Error!Value {
+    if (v != .string) return v;
+
+    var aw: Writer.Allocating = .init(arena);
+
+    if (args.isMarkup(v)) {
+        aw.writer.writeAll(v.string.bytes) catch return error.OutOfMemory;
+    } else {
+        try escapeTo(&aw.writer, v.string.bytes);
+    }
+
+    const buf = aw.written();
+    return .{ .string = .{ .bytes = buf, .safe = false } };
+}
+
 fn w(writer: *Writer, bytes: []const u8) Error!void {
     writer.writeAll(bytes) catch return error.OutOfMemory;
 }
