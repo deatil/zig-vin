@@ -576,8 +576,8 @@ test "DynMapLoader renderTemplateAlloc" {
     const a = arena.allocator();
 
     var map: *vin.DynMapLoader = try .create(a);
-    try map.put("base2", @embedFile("testdata/views/base2.htm"));
-    try map.put("sub/show6", @embedFile("testdata/views/sub/show6.htm"));
+    try map.add("base2", @embedFile("testdata/views/base2.htm"));
+    try map.add("sub/show6", @embedFile("testdata/views/sub/show6.htm"));
 
     var env = try vin.Environment.initWithLoader(a, .{}, map.loader());
     defer env.deinit();
@@ -952,7 +952,7 @@ test "MultiLoader" {
     const a = arena.allocator();
 
     var map: *vin.DynMapLoader = try .create(a);
-    try map.put("sub/show1", @embedFile("testdata/views/sub2/show1.htm"));
+    try map.add("sub/show1", @embedFile("testdata/views/sub2/show1.htm"));
 
     const dl: *vin.DirLoader = try .create(
         a,

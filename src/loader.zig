@@ -78,16 +78,20 @@ pub const DynMapLoader = struct {
         self.* = undefined;
     }
 
-    pub fn put(self: *Self, name: []const u8, source: []const u8) !void {
+    pub fn add(self: *Self, name: []const u8, source: []const u8) !void {
         try self.entries.put(self.gpa, name, .{ .name = name, .source = source });
     }
 
-    pub fn get(self: *const Self, name: []const u8) ?Entry {
-        if (self.entries.get(name)) |e| {
-            return e;
-        }
+    pub fn remove(self: *Self, name: []const u8) bool {
+        return self.entries.remove(name);
+    }
 
-        return null;
+    pub fn has(self: *Self, name: []const u8) bool {
+        return self.entries.contains(name);
+    }
+
+    pub fn get(self: *const Self, name: []const u8) ?Entry {
+        return self.entries.get(name);
     }
 
     pub fn loader(self: *const Self) Loader {
@@ -195,29 +199,6 @@ pub const max_component_len: usize = 255;
 pub const max_components: usize = 32;
 
 /// Templates read from a directory, contained within it.
-///
-/// Containment is enforced twice over, and the second half is why this is not
-/// just `dir.openFile(name)`:
-///
-/// 1. **Lexically** (`checkName`): no absolute paths, no `..`, no `.`, no
-///    backslashes, no NULs, no empty components.
-/// 2. **Structurally**: the path is walked one component at a time, each
-///    directory opened relative to the previous handle with
-///    `follow_symlinks = false`, and the final file opened the same way. No
-///    symlink anywhere along the path is ever traversed, so a symlink planted
-///    inside the root cannot redirect a read outside it — and because every
-///    open is relative to a held handle rather than to a re-resolved string,
-///    there is no window between checking and opening for anything to be
-///    swapped underneath.
-///
-/// `resolve_beneath` is requested as well, where the kernel supports it. It is
-/// belt and braces: std documents it as *silently ignored* when unsupported, so
-/// nothing here depends on it.
-///
-/// Set `allow_symlinks` to trade the portable guarantee for the kernel's: with
-/// it on, symlinks are followed and containment falls back to `resolve_beneath`
-/// alone, which is airtight on a Linux with `openat2` and **absent** elsewhere.
-/// Off (the default) is the guarantee this module is willing to state.
 pub const DirLoader = struct {
     io: std.Io,
     root: std.Io.Dir,
@@ -371,4 +352,27 @@ test "MapLoader answers by exact name and null otherwise" {
     try testing.expectEqualStrings("BC", (try l.load(l.ctx, a, "b/c")).?);
     try testing.expect((try l.load(l.ctx, a, "nope")) == null);
     try testing.expect((try l.load(l.ctx, a, "")) == null);
+}
+
+test "DynMapLoader methods check" {
+    const alloc = testing.allocator;
+
+    var arena: std.heap.ArenaAllocator = .init(alloc);
+    defer arena.deinit();
+
+    const a = arena.allocator();
+
+    var map: *DynMapLoader = try .create(a);
+    try map.add("a", "A");
+
+    try testing.expectEqual(true, map.has("a"));
+    try testing.expectEqual(false, map.has("b"));
+
+    try map.add("b", "B");
+    try testing.expectEqual(true, map.has("b"));
+
+    try testing.expectEqual(true, map.remove("b"));
+    try testing.expectEqual(false, map.has("b"));
+
+    try testing.expectEqualStrings("A", map.get("a").?.source);
 }
