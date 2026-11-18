@@ -576,34 +576,21 @@ pub fn escapeTo(writer: *Writer, bytes: []const u8) Error!void {
 pub fn escapeAlloc(arena: Allocator, bytes: []const u8) Error![]const u8 {
     var aw: Writer.Allocating = .init(arena);
     try escapeTo(&aw.writer, bytes);
-    return aw.written();
+    return aw.toOwnedSlice() catch return error.OutOfMemory;
 }
 
-pub fn valueEscapeAlloc(arena: Allocator, v: Value) Error![]const u8 {
-    var aw: Writer.Allocating = .init(arena);
-
-    if (args.isMarkup(v)) {
-        aw.writer.writeAll(v.string.bytes) catch return error.OutOfMemory;
-    } else {
-        if (v == .string) try escapeTo(&aw.writer, v.string.bytes);
-    }
-
-    return aw.toOwnedSlice() catch return error.OutOfMemory;
+pub fn escapedBytes(arena: Allocator, v: Value) Error![]const u8 {
+    if (v != .string) return "";
+    if (v == .string and v.string.safe) return v.string.bytes;
+    return escapeAlloc(arena, v.string.bytes);
 }
 
 pub fn escapeValueAlloc(arena: Allocator, v: Value) Error!Value {
     if (v != .string) return v;
+    if (v == .string and v.string.safe) return v;
 
-    var aw: Writer.Allocating = .init(arena);
-
-    if (args.isMarkup(v)) {
-        aw.writer.writeAll(v.string.bytes) catch return error.OutOfMemory;
-    } else {
-        try escapeTo(&aw.writer, v.string.bytes);
-    }
-
-    const buf = aw.written();
-    return .{ .string = .{ .bytes = buf, .safe = false } };
+    const buf = try escapeAlloc(arena, v.string.bytes);
+    return .{ .string = .{ .bytes = buf, .safe = true } };
 }
 
 fn w(writer: *Writer, bytes: []const u8) Error!void {

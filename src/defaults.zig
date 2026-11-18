@@ -33,6 +33,11 @@ fn titleMethod(ctx: *Ctx, input: Value) Error!Value {
     return args_mod.markupAware(ctx, input, out);
 }
 
+fn escapedBytes(ctx: *Ctx, v: Value) Error![]const u8 {
+    if (v == .string and v.string.safe) return v.string.bytes;
+    return value.escapeAlloc(ctx.arena, try ctx.toStr(v));
+}
+
 fn fUpper(ctx: *Ctx, input: Value, args: Args) Error!Value {
     _ = args;
     const s = try ctx.toStr(input);
@@ -725,11 +730,6 @@ fn fJoin(ctx: *Ctx, input: Value, args: Args) Error!Value {
     return .{ .string = .{ .bytes = out.items, .safe = true } };
 }
 
-fn escapedBytes(ctx: *Ctx, v: Value) Error![]const u8 {
-    if (v == .string and v.string.safe) return v.string.bytes;
-    return value.escapeAlloc(ctx.arena, try ctx.toStr(v));
-}
-
 fn fBatch(ctx: *Ctx, input: Value, args: Args) Error!Value {
     const items = try args_mod.seq(ctx, input);
     const n_i = try args_mod.intArg(args.get(0, "linecount") orelse return error.BadArgument, 1);
@@ -1406,13 +1406,13 @@ fn formatField(ctx: *Ctx, v: Value, spec: FormatSpec) ![]const u8 {
 
     switch (spec.conversion) {
         's' => {
-            const v2 = value.escapeValueAlloc(ctx.arena, v) catch return error.BadArgument;
+            const v2 = try value.escapeValueAlloc(ctx.arena, v);
             const s = try ctx.toStr(v2);
             const shown = if (spec.precision) |p| s[0..@min(p, s.len)] else s;
             try aw.writer.writeAll(shown);
         },
         'r' => {
-            const v2 = value.escapeValueAlloc(ctx.arena, v) catch return error.BadArgument;
+            const v2 = try value.escapeValueAlloc(ctx.arena, v);
             try value.reprTo(&aw.writer, v2);
         },
         'c' => {
