@@ -1721,4 +1721,16 @@ test "value escapedBytes" {
 
         try testing.expectEqualStrings("abc123", out);
     }
+    {
+        var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        
+        const v = try value.from(a, .{
+            .a = "abc123",
+            .yy = 98,
+        });
+        const out = try value.escapedBytes(a, v);
+        try testing.expectEqualStrings("{'a': 'abc123', 'yy': 98}", out);
+    }
 }

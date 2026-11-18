@@ -1,6 +1,6 @@
 .{
     .name = .zig_vin,
-    .description = "A template render library like jinja2 for zig.",
+    .description = "A template render library like jinja2 for Zig.",
     .version = "0.1.11",
     .fingerprint = 0xcba32739c34472e,
     .minimum_zig_version = "0.17.0",

@@ -580,7 +580,7 @@ pub fn escapeAlloc(arena: Allocator, bytes: []const u8) Error![]const u8 {
 }
 
 pub fn escapedBytes(arena: Allocator, v: Value) Error![]const u8 {
-    if (v != .string) return "";
+    if (v != .string) return strAlloc(arena, v);
     if (v == .string and v.string.safe) return v.string.bytes;
     return escapeAlloc(arena, v.string.bytes);
 }
@@ -629,7 +629,7 @@ pub fn strAlloc(arena: Allocator, v: Value) Error![]const u8 {
     if (v == .string) return v.string.bytes;
     var aw: Writer.Allocating = .init(arena);
     try strTo(&aw.writer, v);
-    return aw.written();
+    return aw.toOwnedSlice() catch return error.OutOfMemory;
 }
 
 /// `repr(v)` — the form used for elements *inside* a container, which is why
@@ -980,12 +980,16 @@ pub fn concat(arena: Allocator, parts: []const Value, autoescape: bool) Error!Va
         if (autoescape and !(p == .string and p.string.safe)) {
             var tmp: Writer.Allocating = .init(arena);
             try strTo(&tmp.writer, p);
-            try escapeTo(&aw.writer, tmp.written());
+
+            const bytes = tmp.toOwnedSlice() catch return error.OutOfMemory;
+            try escapeTo(&aw.writer, bytes);
         } else {
             try strTo(&aw.writer, p);
         }
     }
-    return .{ .string = .{ .bytes = aw.written(), .safe = autoescape } };
+
+    const buf = aw.toOwnedSlice() catch return error.OutOfMemory;
+    return .{ .string = .{ .bytes = buf, .safe = autoescape } };
 }
 
 /// `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `not in`.
