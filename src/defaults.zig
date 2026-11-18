@@ -2,6 +2,7 @@ const std = @import("std");
 const ascii = std.ascii;
 const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
+const mem = std.mem;
 
 const value = @import("value.zig");
 const ast = @import("ast.zig");
@@ -79,7 +80,7 @@ fn fTitle(ctx: *Ctx, input: Value, args: Args) Error!Value {
 fn fTrim(ctx: *Ctx, input: Value, args: Args) Error!Value {
     const s = try ctx.toStr(input);
     const cut = try args_mod.strArg(ctx, args, 0, "chars", " \t\r\n\x0b\x0c");
-    return args_mod.markupAware(ctx, input, std.mem.trim(u8, s, cut));
+    return args_mod.markupAware(ctx, input, mem.trim(u8, s, cut));
 }
 
 ///     if hasattr(old, "__html__") or hasattr(new, "__html__") and not hasattr(s, "__html__"):
@@ -130,7 +131,7 @@ fn replaceCore(ctx: *Ctx, s: []const u8, old: []const u8, new: []const u8, count
     var i: usize = 0;
     var done: usize = 0;
     while (i < s.len) {
-        if (done < limit and std.mem.startsWith(u8, s[i..], old)) {
+        if (done < limit and mem.startsWith(u8, s[i..], old)) {
             try out.appendSlice(ctx.arena, new);
             i += old.len;
             done += 1;
@@ -168,7 +169,7 @@ fn fIndent(ctx: *Ctx, input: Value, args: Args) Error!Value {
 
     var out: std.ArrayList(u8) = .empty;
     if (first) try out.appendSlice(ctx.arena, indention);
-    var it = std.mem.splitScalar(u8, s, '\n');
+    var it = mem.splitScalar(u8, s, '\n');
     var idx: usize = 0;
     while (it.next()) |line| : (idx += 1) {
         if (idx != 0) {
@@ -219,9 +220,9 @@ fn fTruncate(ctx: *Ctx, input: Value, args: Args) Error!Value {
     const keep = length - end_raw.len;
     var cut = s[0..keep];
     if (!killwords) {
-        if (std.mem.findScalarLast(u8, cut, ' ')) |sp| cut = cut[0..sp];
+        if (mem.findScalarLast(u8, cut, ' ')) |sp| cut = cut[0..sp];
     }
-    return .{ .string = .{ .bytes = try std.mem.concat(ctx.arena, u8, &.{ cut, end }), .safe = markup } };
+    return .{ .string = .{ .bytes = try mem.concat(ctx.arena, u8, &.{ cut, end }), .safe = markup } };
 }
 
 fn fWordcount(ctx: *Ctx, input: Value, args: Args) Error!Value {
@@ -244,7 +245,7 @@ fn fStriptags(ctx: *Ctx, input: Value, args: Args) Error!Value {
     var i: usize = 0;
     while (i < s.len) {
         if (s[i] == '<') {
-            if (std.mem.findScalarPos(u8, s, i, '>')) |close| {
+            if (mem.findScalarPos(u8, s, i, '>')) |close| {
                 i = close + 1;
                 continue;
             }
@@ -255,7 +256,7 @@ fn fStriptags(ctx: *Ctx, input: Value, args: Args) Error!Value {
     const unescaped = try unescapeEntities(ctx.arena, stripped.items);
     // Collapse runs of whitespace, then strip.
     var out: std.ArrayList(u8) = .empty;
-    var it = std.mem.tokenizeAny(u8, unescaped, " \t\r\n\x0b\x0c");
+    var it = mem.tokenizeAny(u8, unescaped, " \t\r\n\x0b\x0c");
     var first = true;
     while (it.next()) |w| {
         if (!first) try out.append(ctx.arena, ' ');
@@ -277,7 +278,7 @@ fn unescapeEntities(arena: Allocator, s: []const u8) Error![]const u8 {
             };
             var matched = false;
             inline for (table) |e| {
-                if (!matched and std.mem.startsWith(u8, s[i..], e[0])) {
+                if (!matched and mem.startsWith(u8, s[i..], e[0])) {
                     try out.appendSlice(arena, e[1]);
                     i += e[0].len;
                     matched = true;
@@ -386,7 +387,7 @@ fn quoteIntoQs(ctx: *Ctx, out: *std.ArrayList(u8), s: []const u8, extra_safe: []
             continue;
         }
         const unreserved = ascii.isAlphanumeric(c) or c == '_' or c == '.' or c == '-' or c == '~' or
-            std.mem.findScalar(u8, extra_safe, c) != null;
+            mem.findScalar(u8, extra_safe, c) != null;
         if (unreserved) {
             try out.append(ctx.arena, c);
         } else {
@@ -448,7 +449,7 @@ fn fInt(ctx: *Ctx, input: Value, args: Args) Error!Value {
         .float => |f| if (std.math.isNan(f) or std.math.isInf(f)) dflt else .{ .integer = try args_mod.intFromFloatChecked(f) },
         .undef => error.UndefinedValue,
         .string => |s| blk: {
-            const t = std.mem.trim(u8, s.bytes, " \t\r\n");
+            const t = mem.trim(u8, s.bytes, " \t\r\n");
             if (base) |b| {
                 const strip = b != 0 and b != 10 and t.len > 2 and t[0] == '0' and !ascii.isDigit(t[1]);
                 const stripped = if (strip) t[2..] else t;
@@ -472,7 +473,7 @@ fn fFloat(ctx: *Ctx, input: Value, args: Args) Error!Value {
         .boolean => |b| .{ .float = if (b) 1.0 else 0.0 },
         .undef => error.UndefinedValue,
         .string => |s| blk: {
-            const t = std.mem.trim(u8, s.bytes, " \t\r\n");
+            const t = mem.trim(u8, s.bytes, " \t\r\n");
             if (std.fmt.parseFloat(f64, t)) |f| break :blk .{ .float = f } else |_| {}
             break :blk dflt;
         },
@@ -497,7 +498,7 @@ fn fRound(ctx: *Ctx, input: Value, args: Args) Error!Value {
         .undef => return error.UndefinedValue,
         else => return error.TypeMismatch,
     };
-    if (std.mem.eql(u8, method, "common")) {
+    if (mem.eql(u8, method, "common")) {
         // Python's `round(int, p)` stays an int; `round(float, p)` stays a
         // float. Both reach templates, and the two render differently.
         if (input == .integer or input == .boolean) {
@@ -515,9 +516,9 @@ fn fRound(ctx: *Ctx, input: Value, args: Args) Error!Value {
     // silently produce NaN.
     if (!std.math.isFinite(scale) or scale == 0) return error.OutOfRange;
     const scaled = x * scale;
-    const r: f64 = if (std.mem.eql(u8, method, "ceil"))
+    const r: f64 = if (mem.eql(u8, method, "ceil"))
         @ceil(scaled)
-    else if (std.mem.eql(u8, method, "floor"))
+    else if (mem.eql(u8, method, "floor"))
         @floor(scaled)
     else
         return error.BadArgument;
@@ -797,7 +798,7 @@ fn lessNum(_: void, a: SortKey, b: SortKey) bool {
 }
 
 fn lessText(_: void, a: SortKey, b: SortKey) bool {
-    return std.mem.order(u8, a.text, b.text) == .lt;
+    return mem.order(u8, a.text, b.text) == .lt;
 }
 
 /// Build the comparison keys for sort/min/max/unique. Returns null when the
@@ -860,9 +861,9 @@ fn extremum(ctx: *Ctx, input: Value, args: Args, want_max: bool) Error!Value {
             (if (want_max) key.num > k.keys[best].num else key.num < k.keys[best].num)
         else
             (if (want_max)
-                std.mem.order(u8, key.text, k.keys[best].text) == .gt
+                mem.order(u8, key.text, k.keys[best].text) == .gt
             else
-                std.mem.order(u8, key.text, k.keys[best].text) == .lt);
+                mem.order(u8, key.text, k.keys[best].text) == .lt);
         if (better) best = key.idx;
     }
     return items[k.keys[best].idx];
@@ -922,8 +923,8 @@ fn fDictsort(ctx: *Ctx, input: Value, args: Args) Error!Value {
     const case_sensitive = args_mod.boolArg(args, 0, "case_sensitive", false);
     const by = try args_mod.strArg(ctx, args, 1, "by", "key");
     const reverse = args_mod.boolArg(args, 2, "reverse", false);
-    const use_value = std.mem.eql(u8, by, "value");
-    if (!use_value and !std.mem.eql(u8, by, "key")) return error.BadArgument;
+    const use_value = mem.eql(u8, by, "value");
+    if (!use_value and !mem.eql(u8, by, "key")) return error.BadArgument;
 
     const picked = try ctx.arena.alloc(Value, pairs.len);
     for (pairs, 0..) |p, i| picked[i] = if (use_value) p.value else p.key;
@@ -1138,14 +1139,14 @@ fn fYesno(ctx: *Ctx, input: Value, args: Args) Error!Value {
     const param_v = args.get(0, "param") orelse Value.empty_string;
     const param_string = param_v.toStrings() orelse "";
 
-    const custom_count = std.mem.count(u8, param_string, ",");
+    const custom_count = mem.count(u8, param_string, ",");
     if (param_string.len > 0) {
         if (custom_count + 1 > 3 or custom_count + 1 < 2) {
             return error.BadArgument;
         }
     }
 
-    var custom_choices = std.mem.tokenizeAny(u8, param_string, ",");
+    var custom_choices = mem.tokenizeAny(u8, param_string, ",");
     var i: usize = 0;
     while (custom_choices.next()) |choice| {
         choices[i] = choice;
@@ -1558,7 +1559,7 @@ fn writeFloat(ctx: *Ctx, writer: *Writer, f: f64, spec: FormatSpec) !void {
         text2 = try ctx.arena.dupe(u8, rendered);
     }
 
-    if (spec.alternate and std.mem.findScalar(u8, text2, '.') == null) {
+    if (spec.alternate and mem.findScalar(u8, text2, '.') == null) {
         try writer.writeAll(text2);
         try writer.writeByte('.');
         return;
@@ -1840,16 +1841,16 @@ const Cycler = struct {
 
         var self: *Cycler = @ptrCast(@alignCast(ctx));
 
-        if (std.mem.eql(u8, method, "reset")) {
+        if (mem.eql(u8, method, "reset")) {
             self.pos = 0;
             return .empty_string;
         }
 
-        if (std.mem.eql(u8, method, "current")) {
+        if (mem.eql(u8, method, "current")) {
             return self.items[self.pos];
         }
 
-        if (std.mem.eql(u8, method, "next")) {
+        if (mem.eql(u8, method, "next")) {
             const rv = self.items[self.pos];
             self.pos = (self.pos + 1) % self.items.len;
             return rv;
@@ -1948,89 +1949,89 @@ fn stringMethod(ctx: *Ctx, input: Value, name: []const u8, args: Args) Error!Val
     }
     
     const s = input.string;
-    if (std.mem.eql(u8, name, "upper")) return fUpper(ctx, input, args);
-    if (std.mem.eql(u8, name, "lower")) return fLower(ctx, input, args);
-    if (std.mem.eql(u8, name, "title")) return titleMethod(ctx, input);
-    if (std.mem.eql(u8, name, "capitalize")) return fCapitalize(ctx, input, args);
-    if (std.mem.eql(u8, name, "strip")) return fTrim(ctx, input, args);
-    if (std.mem.eql(u8, name, "replace")) return replaceMethod(ctx, s, args);
-    if (std.mem.eql(u8, name, "lstrip")) {
+    if (mem.eql(u8, name, "upper")) return fUpper(ctx, input, args);
+    if (mem.eql(u8, name, "lower")) return fLower(ctx, input, args);
+    if (mem.eql(u8, name, "title")) return titleMethod(ctx, input);
+    if (mem.eql(u8, name, "capitalize")) return fCapitalize(ctx, input, args);
+    if (mem.eql(u8, name, "strip")) return fTrim(ctx, input, args);
+    if (mem.eql(u8, name, "replace")) return replaceMethod(ctx, s, args);
+    if (mem.eql(u8, name, "lstrip")) {
         const cut = try args_mod.strArg(ctx, args, 0, "chars", " \t\r\n\x0b\x0c");
-        return args_mod.markupAware(ctx, input, std.mem.trimStart(u8, s.bytes, cut));
+        return args_mod.markupAware(ctx, input, mem.trimStart(u8, s.bytes, cut));
     }
-    if (std.mem.eql(u8, name, "rstrip")) {
+    if (mem.eql(u8, name, "rstrip")) {
         const cut = try args_mod.strArg(ctx, args, 0, "chars", " \t\r\n\x0b\x0c");
-        return args_mod.markupAware(ctx, input, std.mem.trimEnd(u8, s.bytes, cut));
+        return args_mod.markupAware(ctx, input, mem.trimEnd(u8, s.bytes, cut));
     }
-    if (std.mem.eql(u8, name, "startswith")) {
+    if (mem.eql(u8, name, "startswith")) {
         const p = try args_mod.strArg(ctx, args, 0, "prefix", "");
-        return .{ .boolean = std.mem.startsWith(u8, s.bytes, p) };
+        return .{ .boolean = mem.startsWith(u8, s.bytes, p) };
     }
-    if (std.mem.eql(u8, name, "endswith")) {
+    if (mem.eql(u8, name, "endswith")) {
         const p = try args_mod.strArg(ctx, args, 0, "suffix", "");
-        return .{ .boolean = std.mem.endsWith(u8, s.bytes, p) };
+        return .{ .boolean = mem.endsWith(u8, s.bytes, p) };
     }
-    if (std.mem.eql(u8, name, "count")) {
+    if (mem.eql(u8, name, "count")) {
         const p = try args_mod.strArg(ctx, args, 0, "sub", "");
         if (p.len == 0) return error.BadArgument;
         var n: i64 = 0;
         var i: usize = 0;
-        while (std.mem.findPos(u8, s.bytes, i, p)) |at| : (i = at + p.len) n += 1;
+        while (mem.findPos(u8, s.bytes, i, p)) |at| : (i = at + p.len) n += 1;
         return .{ .integer = n };
     }
-    if (std.mem.eql(u8, name, "find")) {
+    if (mem.eql(u8, name, "find")) {
         const p = try args_mod.strArg(ctx, args, 0, "sub", "");
-        const at = std.mem.find(u8, s.bytes, p) orelse return .{ .integer = -1 };
+        const at = mem.find(u8, s.bytes, p) orelse return .{ .integer = -1 };
         return .{ .integer = @intCast(at) };
     }
 
-    if (std.mem.eql(u8, name, "split")) {
+    if (mem.eql(u8, name, "split")) {
         const sep_v = args.get(0, "sep");
         var out: std.ArrayList(Value) = .empty;
         if (sep_v == null or sep_v.? == .none) {
-            var it = std.mem.tokenizeAny(u8, s.bytes, " \t\r\n\x0b\x0c");
+            var it = mem.tokenizeAny(u8, s.bytes, " \t\r\n\x0b\x0c");
             while (it.next()) |part| try out.append(ctx.arena, args_mod.markupAware(ctx, input, part));
         } else {
             const sep = try ctx.toStr(sep_v.?);
             if (sep.len == 0) return error.BadArgument;
-            var it = std.mem.splitSequence(u8, s.bytes, sep);
+            var it = mem.splitSequence(u8, s.bytes, sep);
             while (it.next()) |part| try out.append(ctx.arena, args_mod.markupAware(ctx, input, part));
         }
         return .{ .list = out.items };
     }
-    if (std.mem.eql(u8, name, "splitlines")) {
+    if (mem.eql(u8, name, "splitlines")) {
         var out: std.ArrayList(Value) = .empty;
-        var it = std.mem.splitScalar(u8, s.bytes, '\n');
+        var it = mem.splitScalar(u8, s.bytes, '\n');
         var pending: ?[]const u8 = null;
         while (it.next()) |part| {
             if (pending) |pv| try out.append(ctx.arena, args_mod.markupAware(ctx, input, pv));
-            pending = std.mem.trimEnd(u8, part, "\r");
+            pending = mem.trimEnd(u8, part, "\r");
         }
         if (pending) |pv| if (pv.len != 0) try out.append(ctx.arena, args_mod.markupAware(ctx, input, pv));
         return .{ .list = out.items };
     }
-    if (std.mem.eql(u8, name, "join")) {
+    if (mem.eql(u8, name, "join")) {
         const items = args.get(0, "iterable") orelse return error.BadArgument;
         return fJoin(ctx, items, .{ .pos = &.{input} });
     }
-    if (std.mem.eql(u8, name, "isdigit")) {
+    if (mem.eql(u8, name, "isdigit")) {
         if (s.bytes.len == 0) return .{ .boolean = false };
         for (s.bytes) |c| if (!ascii.isDigit(c)) return .{ .boolean = false };
         return .{ .boolean = true };
     }
-    if (std.mem.eql(u8, name, "isalpha")) {
+    if (mem.eql(u8, name, "isalpha")) {
         if (s.bytes.len == 0) return .{ .boolean = false };
         for (s.bytes) |c| if (!ascii.isAlphabetic(c)) return .{ .boolean = false };
         return .{ .boolean = true };
     }
-    if (std.mem.eql(u8, name, "removeprefix")) {
+    if (mem.eql(u8, name, "removeprefix")) {
         const p = try args_mod.strArg(ctx, args, 0, "prefix", "");
-        if (std.mem.startsWith(u8, s.bytes, p)) return args_mod.markupAware(ctx, input, s.bytes[p.len..]);
+        if (mem.startsWith(u8, s.bytes, p)) return args_mod.markupAware(ctx, input, s.bytes[p.len..]);
         return input;
     }
-    if (std.mem.eql(u8, name, "removesuffix")) {
+    if (mem.eql(u8, name, "removesuffix")) {
         const p = try args_mod.strArg(ctx, args, 0, "suffix", "");
-        if (p.len != 0 and std.mem.endsWith(u8, s.bytes, p))
+        if (p.len != 0 and mem.endsWith(u8, s.bytes, p))
             return args_mod.markupAware(ctx, input, s.bytes[0 .. s.bytes.len - p.len]);
         return input;
     }
@@ -2396,7 +2397,7 @@ fn tagIfChanged(
     const body = try parser.parseBody(&.{ "else", "endifchanged" });
     var else_body: []const ast.Node = &.{};
 
-    if (std.mem.eql(u8, body.ended_with, "else")) {
+    if (mem.eql(u8, body.ended_with, "else")) {
         if (body.end_toks.len != 0) {
             return parser.failAt(body.end_line, "unexpected tokens after `else`");
         }

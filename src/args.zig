@@ -2,6 +2,7 @@ const std = @import("std");
 const Io = std.Io;
 const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
+const mem = std.mem;
 
 const value = @import("value.zig");
 const diag = @import("diag.zig");
@@ -23,12 +24,12 @@ pub const Args = struct {
     /// The `i`-th positional argument, or the keyword of that name.
     pub fn get(self: Args, i: usize, name: []const u8) ?Value {
         if (i < self.pos.len) return self.pos[i];
-        for (self.kw) |k| if (std.mem.eql(u8, k.name, name)) return k.value;
+        for (self.kw) |k| if (mem.eql(u8, k.name, name)) return k.value;
         return null;
     }
 
     pub fn byName(self: Args, name: []const u8) ?Value {
-        for (self.kw) |k| if (std.mem.eql(u8, k.name, name)) return k.value;
+        for (self.kw) |k| if (mem.eql(u8, k.name, name)) return k.value;
         return null;
     }
 };
@@ -114,8 +115,8 @@ pub fn seq(ctx: *Ctx, v: Value) Error![]const Value {
 
 pub fn groupAttr(t: []const Value, name: []const u8) ?Value {
     if (t.len != 2 or t[1] != .list) return null;
-    if (std.mem.eql(u8, name, "grouper")) return t[0];
-    if (std.mem.eql(u8, name, "list")) return t[1];
+    if (mem.eql(u8, name, "grouper")) return t[0];
+    if (mem.eql(u8, name, "list")) return t[1];
     return null;
 }
 
@@ -130,7 +131,7 @@ pub fn attrOf(ctx: *Ctx, item: Value, spec: Value) Error!Value {
         },
         .string => |s| {
             var cur = item;
-            var it = std.mem.splitScalar(u8, s.bytes, '.');
+            var it = mem.splitScalar(u8, s.bytes, '.');
             while (it.next()) |part| {
                 if (std.fmt.parseInt(i64, part, 10) catch null) |idx| {
                     const items = value.iterate(ctx.arena, cur) catch return .{ .undef = .{ .name = part } };

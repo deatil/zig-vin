@@ -2,6 +2,7 @@ const std = @import("std");
 const Io = std.Io;
 const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
+const mem = std.mem;
 
 const ast = @import("ast.zig");
 const value = @import("value.zig");
@@ -245,7 +246,7 @@ pub const Renderer = struct {
 
     pub fn failInTemplate(self: *Renderer, template_name: []const u8, err: Error) Error {
         const info = self.diag.message();
-        if (std.mem.startsWith(u8, info, "in template")) return err;
+        if (mem.startsWith(u8, info, "in template")) return err;
 
         const msg = try self.arena.dupe(u8, info);
         return self.fail(self.diag.line, "in template '{s}': {s}", .{ template_name, msg }, err);
@@ -287,7 +288,7 @@ pub const Renderer = struct {
             return v;
         }
 
-        if (std.mem.eql(u8, name, "self")) {
+        if (mem.eql(u8, name, "self")) {
             if (self.selfObject()) |ns| return .{ .namespace = ns } else |_| {}
         }
 
@@ -504,7 +505,7 @@ pub const Renderer = struct {
                 return self.fail(0, "template extends something that never resolved", .{}, error.TemplateNotFound);
             self.pending_parent = null;
 
-            for (chain.items) |seen| if (std.mem.eql(u8, seen.name, parent_name))
+            for (chain.items) |seen| if (mem.eql(u8, seen.name, parent_name))
                 return self.fail(0, "inheritance cycle: '{s}' is already in the chain", .{parent_name}, error.TemplateCycle);
             if (chain.items.len >= self.opts.max_template_depth)
                 return self.fail(0, "inheritance chain longer than {d}", .{self.opts.max_template_depth}, error.TooDeep);
@@ -526,7 +527,7 @@ pub const Renderer = struct {
         var i = from;
         while (i < self.chain.len) : (i += 1) {
             for (self.chain[i].parsed.blocks) |b| {
-                if (std.mem.eql(u8, b.name, name)) return .{ .idx = i, .def = b };
+                if (mem.eql(u8, b.name, name)) return .{ .idx = i, .def = b };
             }
         }
         return null;
@@ -534,7 +535,7 @@ pub const Renderer = struct {
 
     pub fn renderBlockNamed(self: *Renderer, name: []const u8, line: usize) Error!void {
         for (self.include_blocks) |block| {
-            if (std.mem.eql(u8, block.name, name))
+            if (mem.eql(u8, block.name, name))
                 return self.renderNodes(block.body);
         }
 
@@ -908,7 +909,7 @@ pub const Renderer = struct {
                 bound = args.pos[i];
             } else {
                 for (args.kw, 0..) |k, ki| {
-                    if (std.mem.eql(u8, k.name, p.name)) {
+                    if (mem.eql(u8, k.name, p.name)) {
                         bound = k.value;
                         used_kw[ki] = true;
                         break;
@@ -1191,7 +1192,7 @@ pub const Renderer = struct {
             .literal => |v| return v,
             .name => |n| {
                 if (self.block_input) |bi| {
-                    if (std.mem.eql(u8, n, ast.filter_block_input.name)) return bi;
+                    if (mem.eql(u8, n, ast.filter_block_input.name)) return bi;
                 }
                 return self.resolve(n);
             },
@@ -1373,7 +1374,7 @@ pub const Renderer = struct {
                 };
             }
 
-            if (std.mem.eql(u8, name, "super") and self.block_stack.items.len != 0) {
+            if (mem.eql(u8, name, "super") and self.block_stack.items.len != 0) {
                 return self.doSuper(c.line);
             }
 
@@ -1396,8 +1397,8 @@ pub const Renderer = struct {
                 };
             }
 
-            if (std.mem.eql(u8, name, "loop")) return self.recurseLoop(args, c.line);
-            if (std.mem.eql(u8, name, "range")) return self.globalRange(args, c.line);
+            if (mem.eql(u8, name, "loop")) return self.recurseLoop(args, c.line);
+            if (mem.eql(u8, name, "range")) return self.globalRange(args, c.line);
 
             return self.fail(c.line, "'{s}' is not callable", .{name}, error.NotCallable);
         }
@@ -1476,36 +1477,36 @@ pub const Renderer = struct {
     pub fn macroAttr(self: *Renderer, m: value.MacroRef, name: []const u8) Error!Value {
         const impl: *const MacroImpl = @ptrCast(@alignCast(m.impl));
 
-        if (std.mem.eql(u8, name, "name")) return Value.fromString(m.name);
-        if (std.mem.eql(u8, name, "template")) return Value.fromString(impl.template_name);
-        if (std.mem.eql(u8, name, "template_name")) return Value.fromString(impl.template_name);
+        if (mem.eql(u8, name, "name")) return Value.fromString(m.name);
+        if (mem.eql(u8, name, "template")) return Value.fromString(impl.template_name);
+        if (mem.eql(u8, name, "template_name")) return Value.fromString(impl.template_name);
 
-        if (std.mem.eql(u8, name, "arguments")) {
+        if (mem.eql(u8, name, "arguments")) {
             const out = try self.arena.alloc(Value, impl.def.params.len);
             for (impl.def.params, 0..) |p, i| out[i] = Value.fromString(p.name);
             return .{ .tuple = out };
         }
-        if (std.mem.eql(u8, name, "catch_varargs")) return .{ .boolean = impl.def.catch_varargs };
-        if (std.mem.eql(u8, name, "catch_kwargs")) return .{ .boolean = impl.def.catch_kwargs };
-        if (std.mem.eql(u8, name, "caller")) return .{ .boolean = impl.def.uses_caller };
+        if (mem.eql(u8, name, "catch_varargs")) return .{ .boolean = impl.def.catch_varargs };
+        if (mem.eql(u8, name, "catch_kwargs")) return .{ .boolean = impl.def.catch_kwargs };
+        if (mem.eql(u8, name, "caller")) return .{ .boolean = impl.def.uses_caller };
 
         return .{ .undef = .{ .name = name } };
     }
 
     pub fn loopAttr(self: *Renderer, l: *value.Loop, name: []const u8) Error!Value {
         const len = l.items.len;
-        if (std.mem.eql(u8, name, "index")) return .{ .integer = @intCast(l.index0 + 1) };
-        if (std.mem.eql(u8, name, "index0")) return .{ .integer = @intCast(l.index0) };
-        if (std.mem.eql(u8, name, "revindex")) return .{ .integer = @intCast(len - l.index0) };
-        if (std.mem.eql(u8, name, "revindex0")) return .{ .integer = @intCast(len - l.index0 - 1) };
-        if (std.mem.eql(u8, name, "first")) return .{ .boolean = l.index0 == 0 };
-        if (std.mem.eql(u8, name, "last")) return .{ .boolean = l.index0 + 1 == len };
-        if (std.mem.eql(u8, name, "length")) return .{ .integer = @intCast(len) };
-        if (std.mem.eql(u8, name, "depth")) return .{ .integer = @intCast(l.depth0 + 1) };
-        if (std.mem.eql(u8, name, "depth0")) return .{ .integer = @intCast(l.depth0) };
-        if (std.mem.eql(u8, name, "previtem"))
+        if (mem.eql(u8, name, "index")) return .{ .integer = @intCast(l.index0 + 1) };
+        if (mem.eql(u8, name, "index0")) return .{ .integer = @intCast(l.index0) };
+        if (mem.eql(u8, name, "revindex")) return .{ .integer = @intCast(len - l.index0) };
+        if (mem.eql(u8, name, "revindex0")) return .{ .integer = @intCast(len - l.index0 - 1) };
+        if (mem.eql(u8, name, "first")) return .{ .boolean = l.index0 == 0 };
+        if (mem.eql(u8, name, "last")) return .{ .boolean = l.index0 + 1 == len };
+        if (mem.eql(u8, name, "length")) return .{ .integer = @intCast(len) };
+        if (mem.eql(u8, name, "depth")) return .{ .integer = @intCast(l.depth0 + 1) };
+        if (mem.eql(u8, name, "depth0")) return .{ .integer = @intCast(l.depth0) };
+        if (mem.eql(u8, name, "previtem"))
             return if (l.index0 == 0) .{ .undef = .{ .name = "previtem" } } else l.items[l.index0 - 1];
-        if (std.mem.eql(u8, name, "nextitem"))
+        if (mem.eql(u8, name, "nextitem"))
             return if (l.index0 + 1 >= len) .{ .undef = .{ .name = "nextitem" } } else l.items[l.index0 + 1];
         _ = self;
         return .{ .undef = .{ .name = name } };
@@ -1592,14 +1593,14 @@ pub const Renderer = struct {
 
         if (obj == .loop) {
             const l = obj.loop;
-            if (std.mem.eql(u8, name, "cycle")) {
+            if (mem.eql(u8, name, "cycle")) {
                 if (args.pos.len == 0) {
                     return self.fail(line, "'{s}' method bad argument", .{name}, error.BadArgument);
                 }
                 return args.pos[l.index0 % args.pos.len];
             }
 
-            if (std.mem.eql(u8, name, "join")) {
+            if (mem.eql(u8, name, "join")) {
                 if (args.pos.len == 0) {
                     return self.fail(line, "'{s}' method bad argument", .{name}, error.BadArgument);
                 }
@@ -1608,7 +1609,7 @@ pub const Renderer = struct {
                 return sep_v;
             }
 
-            if (std.mem.eql(u8, name, "changed")) {
+            if (mem.eql(u8, name, "changed")) {
                 const prev = l.last_changed;
                 const now = try self.arena.dupe(Value, args.pos);
                 l.last_changed = now;
@@ -1651,18 +1652,18 @@ pub const Renderer = struct {
                 };
 
                 var ctx = self.useCtx();
-                if (std.mem.eql(u8, name, "items")) return args_mod.pairsToList(&ctx, pairs);
-                if (std.mem.eql(u8, name, "keys")) {
+                if (mem.eql(u8, name, "items")) return args_mod.pairsToList(&ctx, pairs);
+                if (mem.eql(u8, name, "keys")) {
                     const out = try self.arena.alloc(Value, pairs.len);
                     for (pairs, 0..) |p, i| out[i] = p.key;
                     return .{ .list = out };
                 }
-                if (std.mem.eql(u8, name, "values")) {
+                if (mem.eql(u8, name, "values")) {
                     const out = try self.arena.alloc(Value, pairs.len);
                     for (pairs, 0..) |p, i| out[i] = p.value;
                     return .{ .list = out };
                 }
-                if (std.mem.eql(u8, name, "get")) {
+                if (mem.eql(u8, name, "get")) {
                     const key = args.get(0, "key") orelse return error.BadArgument;
                     for (pairs) |p| if (value.valueEql(p.key, key)) return p.value;
                     return args.get(1, "default") orelse .none;

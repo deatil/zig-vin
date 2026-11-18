@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const mem = std.mem;
 
 pub const Error = error{
     OutOfMemory,
@@ -75,7 +76,7 @@ pub const Token = struct {
     line: usize = 1,
 
     pub fn isName(self: Token, n: []const u8) bool {
-        return self.kind == .name and std.mem.eql(u8, self.text, n);
+        return self.kind == .name and mem.eql(u8, self.text, n);
     }
 };
 
@@ -125,9 +126,9 @@ pub fn lex(arena: Allocator, source: []const u8, opts: Options, diag: *Diagnosti
         .diag = diag,
     };
     if (!opts.keep_trailing_newline) {
-        if (std.mem.endsWith(u8, l.src, "\r\n")) {
+        if (mem.endsWith(u8, l.src, "\r\n")) {
             l.src = l.src[0 .. l.src.len - 2];
-        } else if (std.mem.endsWith(u8, l.src, "\n")) {
+        } else if (mem.endsWith(u8, l.src, "\n")) {
             l.src = l.src[0 .. l.src.len - 1];
         }
     }
@@ -208,7 +209,7 @@ const Lexer = struct {
             p += 1;
         }
 
-        const end = std.mem.findPos(u8, self.src, p, right) orelse return self.fail("unclosed comment");
+        const end = mem.findPos(u8, self.src, p, right) orelse return self.fail("unclosed comment");
         var body_end = end;
         var strip_after = false;
         var plus_after = false;
@@ -317,7 +318,7 @@ const Lexer = struct {
 
         var scan = self.pos;
         while (true) {
-            const open = std.mem.findPos(u8, self.src, scan, left) orelse
+            const open = mem.findPos(u8, self.src, scan, left) orelse
                 return self.fail("unclosed {% raw %}");
             var q = open + left.len;
 
@@ -330,7 +331,7 @@ const Lexer = struct {
             }
             while (q < self.src.len and isSpace(self.src[q])) q += 1;
 
-            if (!std.mem.startsWith(u8, self.src[q..], "endraw")) {
+            if (!mem.startsWith(u8, self.src[q..], "endraw")) {
                 scan = open + left.len;
                 continue;
             }
@@ -345,7 +346,7 @@ const Lexer = struct {
                 q += 1;
             }
 
-            if (!std.mem.startsWith(u8, self.src[q..], right)) return self.fail("malformed {% endraw %}");
+            if (!mem.startsWith(u8, self.src[q..], right)) return self.fail("malformed {% endraw %}");
             q += right.len;
 
             const body = self.src[self.pos..open];
@@ -399,7 +400,7 @@ const Lexer = struct {
             .{ ">=", Kind.ge },
         };
         inline for (pairs) |pr| {
-            if (std.mem.eql(u8, two, pr[0])) {
+            if (mem.eql(u8, two, pr[0])) {
                 p.* += 2;
                 return .{ .kind = pr[1], .line = line };
             }
@@ -545,7 +546,7 @@ const Lexer = struct {
                 const prev = &self.pieces.items[bi];
                 if (prev.chunk == .text) {
                     if (m.strip_before) {
-                        prev.chunk.text = std.mem.trimEnd(u8, prev.chunk.text, " \t\r\n");
+                        prev.chunk.text = mem.trimEnd(u8, prev.chunk.text, " \t\r\n");
                     } else if (m.block and self.opts.lstrip_blocks and !m.plus_before) {
                         const t = prev.chunk.text;
                         var cut = t.len;
@@ -559,12 +560,12 @@ const Lexer = struct {
                 const nxt = &self.pieces.items[m.after];
                 if (nxt.chunk == .text) {
                     if (m.strip_after) {
-                        nxt.chunk.text = std.mem.trimStart(u8, nxt.chunk.text, " \t\r\n");
+                        nxt.chunk.text = mem.trimStart(u8, nxt.chunk.text, " \t\r\n");
                     } else if (m.block and self.opts.trim_blocks and !m.plus_after) {
                         const t = nxt.chunk.text;
-                        if (std.mem.startsWith(u8, t, "\r\n")) {
+                        if (mem.startsWith(u8, t, "\r\n")) {
                             nxt.chunk.text = t[2..];
-                        } else if (std.mem.startsWith(u8, t, "\n")) {
+                        } else if (mem.startsWith(u8, t, "\n")) {
                             nxt.chunk.text = t[1..];
                         }
                     }
@@ -575,7 +576,7 @@ const Lexer = struct {
 };
 
 fn stripUnderscores(arena: Allocator, s: []const u8) Error![]const u8 {
-    if (std.mem.findScalar(u8, s, '_') == null) return s;
+    if (mem.findScalar(u8, s, '_') == null) return s;
     var out: std.ArrayList(u8) = .empty;
     for (s) |c| if (c != '_') try out.append(arena, c);
     return out.items;
@@ -597,16 +598,16 @@ fn normalizeDelimiters(delims: Delimiters) Delimiters {
 }
 
 fn matchesAt(src: []const u8, pos: usize, delim: []const u8) bool {
-    return pos + delim.len <= src.len and std.mem.eql(u8, src[pos .. pos + delim.len], delim);
+    return pos + delim.len <= src.len and mem.eql(u8, src[pos .. pos + delim.len], delim);
 }
 
 fn tagEndsRight(src: []const u8, p: usize, right: []const u8) bool {
-    return p + right.len <= src.len and std.mem.eql(u8, src[p .. p + right.len], right);
+    return p + right.len <= src.len and mem.eql(u8, src[p .. p + right.len], right);
 }
 
 fn tagEndsRightWithSign(src: []const u8, p: usize, right: []const u8) ?u8 {
     if (p + right.len + 1 <= src.len and (src[p] == '-' or src[p] == '+') and
-        std.mem.eql(u8, src[p + 1 .. p + 1 + right.len], right))
+        mem.eql(u8, src[p + 1 .. p + 1 + right.len], right))
     {
         return src[p];
     }

@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const mem = std.mem;
 
 const lex = @import("lexer.zig");
 const ast = @import("ast.zig");
@@ -157,7 +158,7 @@ pub const Parser = struct {
                     if (toks.len == 0) return self.failAt(piece.line, "empty statement tag");
                     const kw = toks[0];
                     if (kw.kind != .name) return self.failAt(piece.line, "statement must start with a tag name");
-                    for (stop) |s| if (std.mem.eql(u8, s, kw.text)) {
+                    for (stop) |s| if (mem.eql(u8, s, kw.text)) {
                         self.idx += 1;
                         return .{
                             .nodes = nodes.items,
@@ -193,27 +194,27 @@ pub const Parser = struct {
             };
         }
 
-        if (std.mem.eql(u8, kw.text, "if")) return self.parseIf(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "unless")) return self.parseUnless(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "case")) return self.parseCase(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "for")) return self.parseFor(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "while")) return self.parseWhile(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "continue")) return self.parseContinue(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "break")) return self.parseBreak(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "set")) return self.parseSet(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "filter")) return self.parseFilterBlock(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "with")) return self.parseWith(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "extends")) return self.parseExtends(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "block")) return self.parseBlock(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "include")) return self.parseInclude(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "includes")) return self.parseIncludes(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "import")) return self.parseImport(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "from")) return self.parseFromImport(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "render")) return self.parseRender(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "macro")) return self.parseMacro(rest, line, out);
-        if (std.mem.eql(u8, kw.text, "call")) return self.parseCallBlock(rest, line, out);
+        if (mem.eql(u8, kw.text, "if")) return self.parseIf(rest, line, out);
+        if (mem.eql(u8, kw.text, "unless")) return self.parseUnless(rest, line, out);
+        if (mem.eql(u8, kw.text, "case")) return self.parseCase(rest, line, out);
+        if (mem.eql(u8, kw.text, "for")) return self.parseFor(rest, line, out);
+        if (mem.eql(u8, kw.text, "while")) return self.parseWhile(rest, line, out);
+        if (mem.eql(u8, kw.text, "continue")) return self.parseContinue(rest, line, out);
+        if (mem.eql(u8, kw.text, "break")) return self.parseBreak(rest, line, out);
+        if (mem.eql(u8, kw.text, "set")) return self.parseSet(rest, line, out);
+        if (mem.eql(u8, kw.text, "filter")) return self.parseFilterBlock(rest, line, out);
+        if (mem.eql(u8, kw.text, "with")) return self.parseWith(rest, line, out);
+        if (mem.eql(u8, kw.text, "extends")) return self.parseExtends(rest, line, out);
+        if (mem.eql(u8, kw.text, "block")) return self.parseBlock(rest, line, out);
+        if (mem.eql(u8, kw.text, "include")) return self.parseInclude(rest, line, out);
+        if (mem.eql(u8, kw.text, "includes")) return self.parseIncludes(rest, line, out);
+        if (mem.eql(u8, kw.text, "import")) return self.parseImport(rest, line, out);
+        if (mem.eql(u8, kw.text, "from")) return self.parseFromImport(rest, line, out);
+        if (mem.eql(u8, kw.text, "render")) return self.parseRender(rest, line, out);
+        if (mem.eql(u8, kw.text, "macro")) return self.parseMacro(rest, line, out);
+        if (mem.eql(u8, kw.text, "call")) return self.parseCallBlock(rest, line, out);
 
-        if (std.mem.eql(u8, kw.text, "do")) {
+        if (mem.eql(u8, kw.text, "do")) {
             var ts: Stream = .{ .toks = rest, .p = self };
             const e = try ts.parseExpression(line, true);
             try ts.expectEnd(line);
@@ -241,11 +242,11 @@ pub const Parser = struct {
         try self.nest(0);
         defer self.unnest();
         const body = try self.parseBody(&.{ "elif", "else", "endif" });
-        if (std.mem.eql(u8, body.ended_with, "endif")) {
+        if (mem.eql(u8, body.ended_with, "endif")) {
             return .{ .if_ = .{ .cond = cond, .body = body.nodes, .orelse_ = &.{} } };
         }
 
-        if (std.mem.eql(u8, body.ended_with, "else")) {
+        if (mem.eql(u8, body.ended_with, "else")) {
             const else_body = try self.parseBody(&.{"endif"});
             return .{ .if_ = .{ .cond = cond, .body = body.nodes, .orelse_ = else_body.nodes } };
         }
@@ -275,11 +276,11 @@ pub const Parser = struct {
         const negated = try self.dupe(.{ .not = cond });
         const body = try self.parseBody(&.{ "elif", "else", "endunless" });
 
-        if (std.mem.eql(u8, body.ended_with, "endunless")) {
+        if (mem.eql(u8, body.ended_with, "endunless")) {
             return .{ .if_ = .{ .cond = negated, .body = body.nodes, .orelse_ = &.{} } };
         }
 
-        if (std.mem.eql(u8, body.ended_with, "else")) {
+        if (mem.eql(u8, body.ended_with, "else")) {
             const else_body = try self.parseBody(&.{"endunless"});
             return .{ .if_ = .{
                 .cond = negated,
@@ -315,7 +316,7 @@ pub const Parser = struct {
         var state = try self.parseBody(&.{ "when", "else", "endcase" });
 
         while (true) {
-            if (std.mem.eql(u8, state.ended_with, "when")) {
+            if (mem.eql(u8, state.ended_with, "when")) {
                 var values_ts: Stream = .{ .toks = state.end_toks, .p = self };
                 var values: std.ArrayList(*const Expr) = .empty;
 
@@ -334,13 +335,13 @@ pub const Parser = struct {
                 continue;
             }
 
-            if (std.mem.eql(u8, state.ended_with, "else")) {
+            if (mem.eql(u8, state.ended_with, "else")) {
                 const else_state = try self.parseBody(&.{"endcase"});
                 else_body = else_state.nodes;
                 break;
             }
 
-            if (std.mem.eql(u8, state.ended_with, "endcase")) {
+            if (mem.eql(u8, state.ended_with, "endcase")) {
                 break;
             }
 
@@ -371,7 +372,7 @@ pub const Parser = struct {
 
         const body = try self.parseBody(&.{ "else", "endfor" });
         var empty: []const Node = &.{};
-        if (std.mem.eql(u8, body.ended_with, "else")) {
+        if (mem.eql(u8, body.ended_with, "else")) {
             const eb = try self.parseBody(&.{"endfor"});
             empty = eb.nodes;
         }
@@ -489,7 +490,7 @@ pub const Parser = struct {
         }
         try ts.expectEnd(line);
 
-        for (self.blocks.items) |b| if (std.mem.eql(u8, b.name, name_tok.text))
+        for (self.blocks.items) |b| if (mem.eql(u8, b.name, name_tok.text))
             return self.failAt(line, "block defined twice in the same template");
 
         // Reserve the slot before parsing the body so a nested block of the
@@ -509,7 +510,7 @@ pub const Parser = struct {
         if (end.peek()) |t| {
             if (t.kind == .name) {
                 _ = end.next();
-                if (!std.mem.eql(u8, t.text, name_tok.text))
+                if (!mem.eql(u8, t.text, name_tok.text))
                     return self.failAt(body.end_line, "endblock name does not match the block");
             }
         }
@@ -584,14 +585,14 @@ pub const Parser = struct {
 
         for (body.nodes) |node| switch (node) {
             .text => |text| {
-                if (std.mem.trim(u8, text, " \t\r\n").len != 0)
+                if (mem.trim(u8, text, " \t\r\n").len != 0)
                     return self.failAt(line, "an includes body may only contain blocks and whitespace");
             },
             .block => |position| {
                 var found: ?ast.BlockDef = null;
 
                 for (self.blocks.items) |definition| {
-                    if (std.mem.eql(u8, definition.name, position.name)) {
+                    if (mem.eql(u8, definition.name, position.name)) {
                         found = definition;
                         break;
                     }
@@ -840,7 +841,7 @@ pub fn argsMention(a: ast.Args, name: []const u8) bool {
 pub fn exprMentions(e: *const Expr, name: []const u8) bool {
     return switch (e.*) {
         .literal => false,
-        .name => |n| std.mem.eql(u8, n, name),
+        .name => |n| mem.eql(u8, n, name),
         .list, .tuple => |items| blk: {
             for (items) |i| if (exprMentions(i, name)) break :blk true;
             break :blk false;
@@ -1205,11 +1206,11 @@ pub const Stream = struct {
         switch (t.kind) {
             .name => {
                 self.i += 1;
-                if (std.mem.eql(u8, t.text, "true") or std.mem.eql(u8, t.text, "True"))
+                if (mem.eql(u8, t.text, "true") or mem.eql(u8, t.text, "True"))
                     return self.dupe(.{ .literal = .{ .boolean = true } });
-                if (std.mem.eql(u8, t.text, "false") or std.mem.eql(u8, t.text, "False"))
+                if (mem.eql(u8, t.text, "false") or mem.eql(u8, t.text, "False"))
                     return self.dupe(.{ .literal = .{ .boolean = false } });
-                if (std.mem.eql(u8, t.text, "none") or std.mem.eql(u8, t.text, "None"))
+                if (mem.eql(u8, t.text, "none") or mem.eql(u8, t.text, "None"))
                     return self.dupe(.{ .literal = .none });
                 return self.dupe(.{ .name = t.text });
             },
@@ -1447,7 +1448,7 @@ pub const Stream = struct {
         var name = name_tok.text;
         // `is not none` reads as the `none` test, negated; `x is none` as itself.
         if (!self.p.registry.hasTest(self.p.registry.ctx, name)) {
-            if (std.mem.eql(u8, name, "None")) {
+            if (mem.eql(u8, name, "None")) {
                 name = "none";
             } else {
                 return self.p.failAt(line, "unknown test — every test name is resolved at compile time (see README's test table)");

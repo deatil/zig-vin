@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const mem = std.mem;
 
 pub const Error = error{
     OutOfMemory,
@@ -47,7 +48,7 @@ pub const MapLoader = struct {
     fn load(ctx: *const anyopaque, arena: Allocator, name: []const u8) Error!?[]const u8 {
         _ = arena;
         const self: *const Self = @ptrCast(@alignCast(ctx));
-        for (self.entries) |e| if (std.mem.eql(u8, e.name, name)) return e.source;
+        for (self.entries) |e| if (mem.eql(u8, e.name, name)) return e.source;
         return null;
     }
 };
@@ -176,13 +177,13 @@ pub fn checkName(name: []const u8) NameError!void {
     // A Windows drive letter or UNC path is not relative either.
     if (name.len >= 2 and name[1] == ':') return error.EscapingName;
 
-    var it = std.mem.splitScalar(u8, name, '/');
+    var it = mem.splitScalar(u8, name, '/');
     var components: usize = 0;
     while (it.next()) |c| {
         components += 1;
         if (c.len == 0) return error.MalformedName;
         if (c.len > max_component_len) return error.MalformedName;
-        if (std.mem.eql(u8, c, ".") or std.mem.eql(u8, c, "..")) return error.EscapingName;
+        if (mem.eql(u8, c, ".") or mem.eql(u8, c, "..")) return error.EscapingName;
         for (c) |ch| {
             if (ch == 0) return error.EscapingName;
             // `\` is a separator on Windows; treating it as an ordinary
@@ -252,7 +253,7 @@ pub const DirLoader = struct {
         var opened = false;
         defer if (opened) dir.close(self.io);
 
-        var it = std.mem.splitScalar(u8, full, '/');
+        var it = mem.splitScalar(u8, full, '/');
         var pending: []const u8 = it.next().?;
         while (it.next()) |next_component| {
             const child = dir.openDir(self.io, pending, .{

@@ -1,6 +1,12 @@
 const std = @import("std");
 const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
+const mem = std.mem;
+const fmt = std.fmt;
+const math = std.math;
+const meta = std.meta;
+const json = std.json;
+const unicode = std.unicode;
 
 const args = @import("args.zig");
 
@@ -70,7 +76,7 @@ pub const Map = struct {
 
     pub fn get(self: Map, key: []const u8) ?Value {
         for (self.pairs) |p| switch (p.key) {
-            .string => |s| if (std.mem.eql(u8, s.bytes, key)) return p.value,
+            .string => |s| if (mem.eql(u8, s.bytes, key)) return p.value,
             else => {},
         };
 
@@ -96,7 +102,7 @@ pub const Namespace = struct {
 
     pub fn get(self: *const Namespace, key: []const u8) ?Value {
         for (self.pairs.items) |p| switch (p.key) {
-            .string => |s| if (std.mem.eql(u8, s.bytes, key)) return p.value,
+            .string => |s| if (mem.eql(u8, s.bytes, key)) return p.value,
             else => {},
         };
         return null;
@@ -104,7 +110,7 @@ pub const Namespace = struct {
 
     pub fn set(self: *Namespace, gpa: Allocator, key: []const u8, v: Value) !void {
         for (self.pairs.items) |*p| switch (p.key) {
-            .string => |s| if (std.mem.eql(u8, s.bytes, key)) {
+            .string => |s| if (mem.eql(u8, s.bytes, key)) {
                 p.value = v;
                 return;
             },
@@ -483,7 +489,7 @@ pub fn from(arena: Allocator, v: anytype) Error!Value {
     return switch (@typeInfo(T)) {
         .null, .void => .none,
         .bool => .{ .boolean = v },
-        .int, .comptime_int => .{ .integer = std.math.cast(i64, v) orelse return error.OutOfRange },
+        .int, .comptime_int => .{ .integer = math.cast(i64, v) orelse return error.OutOfRange },
         .float, .comptime_float => .{ .float = @floatCast(v) },
         .@"enum" => Value.fromString(@tagName(v)),
         .enum_literal => Value.fromString(@tagName(v)),
@@ -491,7 +497,7 @@ pub fn from(arena: Allocator, v: anytype) Error!Value {
         .array => try fromSlice(arena, &v),
         .pointer => |p| switch (p.size) {
             .one => switch (@typeInfo(p.child)) {
-                .array => try fromSlice(arena, @as([]const std.meta.Elem(p.child), v)),
+                .array => try fromSlice(arena, @as([]const meta.Elem(p.child), v)),
                 else => try from(arena, v.*),
             },
             .slice => try fromSlice(arena, v),
@@ -516,7 +522,7 @@ pub fn from(arena: Allocator, v: anytype) Error!Value {
 }
 
 fn fromSlice(arena: Allocator, s: anytype) Error!Value {
-    const Elem = std.meta.Elem(@TypeOf(s));
+    const Elem = meta.Elem(@TypeOf(s));
     if (Elem == u8) return Value.fromString(s);
     var items = try arena.alloc(Value, s.len);
     for (s, 0..) |e, i| items[i] = try from(arena, e);
@@ -527,11 +533,11 @@ fn fromSlice(arena: Allocator, s: anytype) Error!Value {
 /// dependency. Object order is preserved (`ObjectMap` is a
 /// `StringArrayHashMap`). JSON has no undefined and no markup, so every string
 /// arrives unsafe, which is the correct default for untrusted data.
-pub fn fromJson(arena: Allocator, v: std.json.Value) Error!Value {
+pub fn fromJson(arena: Allocator, v: json.Value) Error!Value {
     return fromJsonDepth(arena, v, 0);
 }
 
-fn fromJsonDepth(arena: Allocator, v: std.json.Value, depth: usize) Error!Value {
+fn fromJsonDepth(arena: Allocator, v: json.Value, depth: usize) Error!Value {
     if (depth > max_value_depth) return error.OutOfRange;
     return switch (v) {
         .null => .none,
@@ -722,15 +728,15 @@ fn reprStrTo(writer: *Writer, bytes: []const u8) Error!void {
 /// there is no fractional part. `1e15` is `1000000000000000.0`; `1e16` is
 /// `1e+16`; `1e-5` is `1e-05`.
 pub fn floatTo(writer: *Writer, f: f64) Error!void {
-    if (std.math.isNan(f)) return w(writer, "nan");
-    if (std.math.isInf(f)) return w(writer, if (f < 0) "-inf" else "inf");
+    if (math.isNan(f)) return w(writer, "nan");
+    if (math.isInf(f)) return w(writer, if (f < 0) "-inf" else "inf");
 
     var buf: [64]u8 = undefined;
     // Zig's `{e}` is shortest-round-trip scientific: `[-]D[.DDDD]e[-]E`.
-    const sci = std.fmt.bufPrint(&buf, "{e}", .{f}) catch return error.OutOfRange;
-    const e_at = std.mem.findScalar(u8, sci, 'e').?;
+    const sci = fmt.bufPrint(&buf, "{e}", .{f}) catch return error.OutOfRange;
+    const e_at = mem.findScalar(u8, sci, 'e').?;
     var mant = sci[0..e_at];
-    const exp = std.fmt.parseInt(i32, sci[e_at + 1 ..], 10) catch return error.OutOfRange;
+    const exp = fmt.parseInt(i32, sci[e_at + 1 ..], 10) catch return error.OutOfRange;
 
     var neg = false;
     if (mant.len > 0 and mant[0] == '-') {
@@ -851,9 +857,9 @@ pub fn binary(arena: Allocator, op: BinOp, a: Value, b: Value) Error!Value {
         const x = asInt(a).?;
         const y = asInt(b).?;
         return switch (op) {
-            .add => intOf(std.math.add(i64, x, y)),
-            .sub => intOf(std.math.sub(i64, x, y)),
-            .mul => intOf(std.math.mul(i64, x, y)),
+            .add => intOf(math.add(i64, x, y)),
+            .sub => intOf(math.sub(i64, x, y)),
+            .mul => intOf(math.mul(i64, x, y)),
             .floordiv => if (y == 0) error.DivisionByZero else pyFloorDiv(x, y),
             .mod => if (y == 0) error.DivisionByZero else pyMod(x, y),
             .pow => intPow(x, y),
@@ -872,7 +878,7 @@ pub fn binary(arena: Allocator, op: BinOp, a: Value, b: Value) Error!Value {
         // — see `intPow`. `x == 0.0` is also true for `-0.0` (Python agrees:
         // `(-0.0) ** -1` raises), and `y < 0` is false for `-0.0` (Python
         // agrees: `0.0 ** -0.0` is `1.0`).
-        .pow => if (x == 0.0 and y < 0) error.DivisionByZero else .{ .float = std.math.pow(f64, x, y) },
+        .pow => if (x == 0.0 and y < 0) error.DivisionByZero else .{ .float = math.pow(f64, x, y) },
         .div, .concat => unreachable,
     };
 }
@@ -885,14 +891,14 @@ pub fn intOf(r: anytype) Error!Value {
 /// of the DIVISOR, so `-7 // 2 == -4` and `7 % -2 == -1`. Zig's `@mod`/`@divFloor`
 /// are only defined for a positive divisor, so this is spelled out.
 fn pyFloorDiv(x: i64, y: i64) Error!Value {
-    if (x == std.math.minInt(i64) and y == -1) return error.OutOfRange;
+    if (x == math.minInt(i64) and y == -1) return error.OutOfRange;
     const q = @divTrunc(x, y);
     const r = @rem(x, y);
     return .{ .integer = if (r != 0 and ((r < 0) != (y < 0))) q - 1 else q };
 }
 
 fn pyMod(x: i64, y: i64) Error!Value {
-    if (x == std.math.minInt(i64) and y == -1) return .{ .integer = 0 };
+    if (x == math.minInt(i64) and y == -1) return .{ .integer = 0 };
     const r = @rem(x, y);
     return .{ .integer = if (r != 0 and ((r < 0) != (y < 0))) r + y else r };
 }
@@ -907,7 +913,7 @@ fn intPow(x: i64, y: i64) Error!Value {
         if (x == 0) return error.DivisionByZero;
         const fx: f64 = @floatFromInt(x);
         const fy: f64 = @floatFromInt(y);
-        return .{ .float = std.math.pow(f64, fx, fy) };
+        return .{ .float = math.pow(f64, fx, fy) };
     }
 
     switch (x) {
@@ -921,7 +927,7 @@ fn intPow(x: i64, y: i64) Error!Value {
     var acc: i64 = 1;
     var i: i64 = 0;
     while (i < y) : (i += 1) {
-        acc = std.math.mul(i64, acc, x) catch return error.OutOfRange;
+        acc = math.mul(i64, acc, x) catch return error.OutOfRange;
     }
     return .{ .integer = acc };
 }
@@ -930,16 +936,16 @@ fn joinStrings(arena: Allocator, a: Str, b: Str) Error!Value {
     if (a.safe or b.safe) {
         const ab = if (a.safe) a.bytes else try escapeAlloc(arena, a.bytes);
         const bb = if (b.safe) b.bytes else try escapeAlloc(arena, b.bytes);
-        return .{ .string = .{ .bytes = try std.mem.concat(arena, u8, &.{ ab, bb }), .safe = true } };
+        return .{ .string = .{ .bytes = try mem.concat(arena, u8, &.{ ab, bb }), .safe = true } };
     }
-    return Value.fromString(try std.mem.concat(arena, u8, &.{ a.bytes, b.bytes }));
+    return Value.fromString(try mem.concat(arena, u8, &.{ a.bytes, b.bytes }));
 }
 
 fn repeatStr(arena: Allocator, s: Str, times: i64) Error!Value {
     if (times <= 0) return .{ .string = .{ .bytes = "", .safe = s.safe } };
     const n: usize = @intCast(times);
 
-    const total = std.math.mul(usize, s.bytes.len, n) catch return error.OutOfRange;
+    const total = math.mul(usize, s.bytes.len, n) catch return error.OutOfRange;
     if (total > max_alloc) return error.OutOfRange;
     const out = try arena.alloc(u8, total);
     var i: usize = 0;
@@ -951,7 +957,7 @@ fn repeatList(arena: Allocator, l: []const Value, times: i64) Error!Value {
     if (times <= 0) return .{ .list = &.{} };
     const n: usize = @intCast(times);
 
-    const total = std.math.mul(usize, l.len, n) catch return error.OutOfRange;
+    const total = math.mul(usize, l.len, n) catch return error.OutOfRange;
     if (total > max_items) return error.OutOfRange;
     const out = try arena.alloc(Value, total);
     var i: usize = 0;
@@ -1011,12 +1017,12 @@ pub fn compare(op: CmpOp, a: Value, b: Value) Error!bool {
     }
     if (a == .undef or b == .undef) return error.UndefinedValue;
 
-    const ord: std.math.Order = blk: {
+    const ord: math.Order = blk: {
         if (isNumeric(a) and isNumeric(b)) {
-            if (a != .float and b != .float) break :blk std.math.order(asInt(a).?, asInt(b).?);
-            break :blk std.math.order(asFloat(a).?, asFloat(b).?);
+            if (a != .float and b != .float) break :blk math.order(asInt(a).?, asInt(b).?);
+            break :blk math.order(asFloat(a).?, asFloat(b).?);
         }
-        if (a == .string and b == .string) break :blk std.mem.order(u8, a.string.bytes, b.string.bytes);
+        if (a == .string and b == .string) break :blk mem.order(u8, a.string.bytes, b.string.bytes);
         if (a == .list and b == .list) break :blk try orderLists(a.list, b.list);
         if (a == .tuple and b == .tuple) break :blk try orderLists(a.tuple, b.tuple);
         return error.TypeMismatch;
@@ -1030,13 +1036,13 @@ pub fn compare(op: CmpOp, a: Value, b: Value) Error!bool {
     };
 }
 
-fn orderLists(a: []const Value, b: []const Value) Error!std.math.Order {
+fn orderLists(a: []const Value, b: []const Value) Error!math.Order {
     var i: usize = 0;
     while (i < a.len and i < b.len) : (i += 1) {
         if (valueEql(a[i], b[i])) continue;
         return if (try compare(.lt, a[i], b[i])) .lt else .gt;
     }
-    return std.math.order(a.len, b.len);
+    return math.order(a.len, b.len);
 }
 
 /// Python `==`. Numbers compare across int/float/bool; everything else must
@@ -1051,7 +1057,7 @@ pub fn valueEql(a: Value, b: Value) bool {
 
     return switch (a) {
         .none => b == .none,
-        .string => |s| b == .string and std.mem.eql(u8, s.bytes, b.string.bytes),
+        .string => |s| b == .string and mem.eql(u8, s.bytes, b.string.bytes),
         .list => |l| b == .list and listEql(l, b.list),
         .tuple => |l| b == .tuple and listEql(l, b.tuple),
         .map => |m| b == .map and pairsEql(m.pairs, b.map.pairs),
@@ -1091,7 +1097,7 @@ pub fn contains(haystack: Value, needle: Value) Error!bool {
     return switch (haystack) {
         .string => |s| blk: {
             if (needle != .string) return error.TypeMismatch;
-            break :blk std.mem.find(u8, s.bytes, needle.string.bytes) != null;
+            break :blk mem.find(u8, s.bytes, needle.string.bytes) != null;
         },
         .list, .tuple => |l| blk: {
             for (l) |e| if (valueEql(e, needle)) break :blk true;
@@ -1118,7 +1124,7 @@ pub fn chars(arena: Allocator, s: Str) Error![]const Value {
     var out: std.ArrayList(Value) = .empty;
     var i: usize = 0;
     while (i < s.bytes.len) {
-        const n = std.unicode.utf8ByteSequenceLength(s.bytes[i]) catch 1;
+        const n = unicode.utf8ByteSequenceLength(s.bytes[i]) catch 1;
         const end = @min(i + n, s.bytes.len);
         try out.append(arena, Value.fromString(s.bytes[i..end]));
         i = end;
@@ -1149,7 +1155,7 @@ pub fn iterate(arena: Allocator, v: Value) Error![]const Value {
 /// `len(v)`. Strings count **codepoints**, matching Python.
 pub fn length(v: Value) Error!usize {
     return switch (v) {
-        .string => |s| std.unicode.utf8CountCodepoints(s.bytes) catch s.bytes.len,
+        .string => |s| unicode.utf8CountCodepoints(s.bytes) catch s.bytes.len,
         .list, .tuple => |l| l.len,
         .map => |m| m.pairs.len,
         .namespace => |ns| ns.pairs.items.len,
