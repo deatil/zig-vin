@@ -142,6 +142,13 @@ pub fn attrOf(ctx: *Ctx, item: Value, spec: Value) Error!Value {
                 cur = switch (cur) {
                     .map => |m| m.get(part) orelse return .{ .undef = .{ .name = part } },
                     .namespace => |ns| ns.get(part) orelse return .{ .undef = .{ .name = part } },
+                    .callable => |c| {
+                        if (c.getAttr) |fn_ptr| {
+                            return fn_ptr(c.ctx, ctx, part) catch return .{ .undef = .{ .name = part } };
+                        }
+
+                        return .{ .undef = .{ .name = part } };
+                    },
                     .tuple => |t| groupAttr(t, part) orelse return .{ .undef = .{ .name = part } },
                     else => return .{ .undef = .{ .name = part } },
                 };

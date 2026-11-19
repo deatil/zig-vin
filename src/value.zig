@@ -166,6 +166,8 @@ pub const Callable = struct {
     setItem: ?*const fn (ctx: *anyopaque, fctx: *args.Ctx, idx: Value, val: Value) Error!void = null,
     // Get item value
     getItem: ?*const fn (ctx: *anyopaque, fctx: *args.Ctx, idx: Value) Error!Value = null,
+    // Output string
+    toString: ?*const fn (ctx: *anyopaque) Error![]const u8 = null,
 };
 
 // For value call, no state
@@ -669,7 +671,14 @@ fn reprToDepth(writer: *Writer, v: Value, depth: usize) Error!void {
         .map => |m| try reprPairs(writer, m.pairs, depth + 1),
         .namespace => |ns| try reprPairs(writer, ns.pairs.items, depth + 1),
         .loop => try w(writer, "<loop>"),
-        .callable => try w(writer, "<callable>"),
+        .callable => |c| {
+            if (c.toString) |fn_ptr| {
+                const str = try fn_ptr(c.ctx);
+                try w(writer, str);
+            } else {
+                try w(writer, "<callable>");
+            }
+        },
         .caller => try w(writer, "<caller>"),
         .macro => |m| {
             try w(writer, "<Macro '");

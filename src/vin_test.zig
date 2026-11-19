@@ -1,4 +1,5 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const testing = std.testing;
 
 const vin = @import("vin.zig");
@@ -1395,6 +1396,59 @@ test "value callable getItem" {
         "|12,7" ++
         "|3.5,9.5";
     try testing.expectEqualStrings(expect, out);
+}
+
+const TestBA5 = struct {
+    arena: Allocator,
+
+    pub fn toString(ctx: *anyopaque) vin.ArgsError![]const u8 {
+        const self: *TestBA5 = @ptrCast(@alignCast(ctx));
+
+        const v = vin.valueFrom(self.arena, .{
+            .a = "aaa",
+            .b = "bbb",
+        }) catch return error.BadArgument;
+        const str = value.strAlloc(self.arena, v) catch return error.BadArgument;
+
+        return str;
+    }
+};
+
+test "value callable toString" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var ba: TestBA5 = .{
+        .arena = alloc,
+    };
+
+    {
+        const val: vin.Value = .fromCallable(.{
+            .ctx = &ba,
+            .toString = TestBA5.toString,
+        });
+
+        try testing.expectEqual(true, val.isCallable());
+
+        const out = try value.strAlloc(alloc, val);
+
+        const expect = "{'a': 'aaa', 'b': 'bbb'}";
+        try testing.expectEqualStrings(expect, out);
+    }
+
+    {
+        const val: vin.Value = .fromCallable(.{
+            .ctx = &ba,
+        });
+
+        try testing.expectEqual(true, val.isCallable());
+
+        const out = try value.strAlloc(alloc, val);
+
+        const expect = "<callable>";
+        try testing.expectEqualStrings(expect, out);
+    }
 }
 
 test "env range fail" {
