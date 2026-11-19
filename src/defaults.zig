@@ -1259,6 +1259,11 @@ const GroupCtx = struct {
 
         return str;
     }
+
+    pub fn toSlice(ctx: *anyopaque) args_mod.Error![]const Value {
+        const self: *GroupCtx = @ptrCast(@alignCast(ctx));
+        return self.tuple;
+    }
 };
 
 fn fGroupby(ctx: *Ctx, input: Value, args: Args) Error!Value {
@@ -1318,6 +1323,7 @@ fn fGroupby(ctx: *Ctx, input: Value, args: Args) Error!Value {
             .setAttr = GroupCtx.setAttr,
             .getAttr = GroupCtx.getAttr,
             .toString = GroupCtx.toString,
+            .toSlice = GroupCtx.toSlice,
         });
 
         try out.append(ctx.arena, v.*);

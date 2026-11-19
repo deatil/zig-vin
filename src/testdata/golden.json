@@ -5404,7 +5404,7 @@
     "out": "NYC: emma, john;WA: smith;",
     "status": "ok",
     "strict": false,
-    "template": "{% for items in users|groupby('city') %}{{ items.grouper }}: {% for u in items.list %}{{ u.name }}{% if not loop.last %}, {% endif %}{% endfor %};{% endfor %}",
+    "template": "{% for city, items in users|groupby('city') %}{{ city }}: {% for u in items %}{{ u.name }}{% if not loop.last %}, {% endif %}{% endfor %};{% endfor %}",
     "templates": {},
     "trim_blocks": false
   },

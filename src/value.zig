@@ -25,6 +25,7 @@ pub const Error = error{
     Unsupported,
     // for callable
     InvalidMethod,
+    InvalidValue,
     InvalidExec,
     // for return diag message
     DiagInvalidTemplateSyntax,
@@ -168,6 +169,8 @@ pub const Callable = struct {
     getItem: ?*const fn (ctx: *anyopaque, fctx: *args.Ctx, idx: Value) Error!Value = null,
     // Output string
     toString: ?*const fn (ctx: *anyopaque) Error![]const u8 = null,
+    // Output slice value
+    toSlice: ?*const fn (ctx: *anyopaque) Error![]const Value = null,
 };
 
 // For value call, no state
@@ -1155,6 +1158,13 @@ pub fn iterate(arena: Allocator, v: Value) Error![]const Value {
             const out = try arena.alloc(Value, ns.pairs.items.len);
             for (ns.pairs.items, 0..) |p, i| out[i] = p.key;
             break :blk out;
+        },
+        .callable => |c| {
+            if (c.toSlice) |fn_ptr| {
+                return try fn_ptr(c.ctx);
+            }
+
+            return error.InvalidValue;
         },
         .undef => error.UndefinedValue,
         else => error.TypeMismatch,
