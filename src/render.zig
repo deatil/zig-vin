@@ -1469,7 +1469,6 @@ pub const Renderer = struct {
             },
             .loop => |l| return self.loopAttr(l, name),
             .macro => |m| return self.macroAttr(m, name),
-            .tuple => |t| return args_mod.groupAttr(t, name) orelse .{ .undef = .{ .name = name } },
             else => return .{ .undef = .{ .name = name } },
         }
     }

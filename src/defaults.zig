@@ -1211,6 +1211,56 @@ fn groupLess(keys: []const Value, a: usize, b: usize) bool {
     return value.compare(.lt, keys[a], keys[b]) catch false;
 }
 
+fn groupAttr(t: []const Value, name: []const u8) ?Value {
+    if (t.len != 2 or t[1] != .list) return null;
+    if (mem.eql(u8, name, "grouper")) return t[0];
+    if (mem.eql(u8, name, "list")) return t[1];
+    return null;
+}
+
+const GroupCtx = struct {
+    arena: Allocator,
+    tuple: []Value,
+
+    pub fn setAttr(ctx: *anyopaque, fctx: *Ctx, name: []const u8, val: Value) args_mod.Error!void {
+        _ = fctx;
+
+        var self: *GroupCtx = @ptrCast(@alignCast(ctx));
+
+        if (std.mem.eql(u8, name, "grouper")) {
+            self.tuple[0] = val;
+            return;
+        }
+        if (std.mem.eql(u8, name, "list")) {
+            if (val != .list) self.tuple[1] = val;
+            return;
+        }
+
+        return error.BadArgument;
+    }
+
+    pub fn getAttr(ctx: *anyopaque, fctx: *Ctx, name: []const u8) args_mod.Error!Value {
+        _ = fctx;
+
+        const self: *GroupCtx = @ptrCast(@alignCast(ctx));
+        
+        if (groupAttr(self.tuple, name)) |v| {
+            return v;
+        }
+
+        return .{ .undef = .{ .name = name } };
+    }
+
+    pub fn toString(ctx: *anyopaque) args_mod.Error![]const u8 {
+        const self: *GroupCtx = @ptrCast(@alignCast(ctx));
+
+        const v: Value = .fromTuple(self.tuple);
+        const str = value.strAlloc(self.arena, v) catch return error.BadArgument;
+
+        return str;
+    }
+};
+
 fn fGroupby(ctx: *Ctx, input: Value, args: Args) Error!Value {
     const items = try args_mod.seq(ctx, input);
     const attr = args.get(0, "attribute") orelse return error.BadArgument;
@@ -1255,7 +1305,23 @@ fn fGroupby(ctx: *Ctx, input: Value, args: Args) Error!Value {
         const pair = try ctx.arena.alloc(Value, 2);
         pair[0] = raw[order[i]];
         pair[1] = .{ .list = members };
-        try out.append(ctx.arena, .{ .tuple = pair });
+
+        const gCtx = try ctx.arena.create(GroupCtx);
+        gCtx.* = .{
+            .arena = ctx.arena,
+            .tuple = pair,
+        };
+
+        const v = try ctx.arena.create(Value);
+        v.* = .fromCallable(.{
+            .ctx = gCtx,
+            .setAttr = GroupCtx.setAttr,
+            .getAttr = GroupCtx.getAttr,
+            .toString = GroupCtx.toString,
+        });
+
+        try out.append(ctx.arena, v.*);
+
         i = j;
     }
 
