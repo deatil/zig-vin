@@ -1231,8 +1231,9 @@ const GroupCtx = struct {
             self.tuple[0] = val;
             return;
         }
+
         if (std.mem.eql(u8, name, "list")) {
-            if (val != .list) self.tuple[1] = val;
+            if (val == .list) self.tuple[1] = val;
             return;
         }
 
@@ -1249,6 +1250,40 @@ const GroupCtx = struct {
         }
 
         return .{ .undef = .{ .name = name } };
+    }
+
+    pub fn setItem(ctx: *anyopaque, fctx: *Ctx, idx: Value, val: Value) args_mod.Error!void {
+        _ = fctx;
+
+        var self: *GroupCtx = @ptrCast(@alignCast(ctx));
+
+        if (value.valueEql(idx, .fromInt(0))) {
+            self.tuple[0] = val;
+            return;
+        }
+
+        if (value.valueEql(idx, .fromInt(1))) {
+            if (val == .list) self.tuple[1] = val;
+            return;
+        }
+
+        return error.BadArgument;
+    }
+
+    pub fn getItem(ctx: *anyopaque, fctx: *Ctx, idx: Value) args_mod.Error!Value {
+        _ = fctx;
+
+        const self: *GroupCtx = @ptrCast(@alignCast(ctx));
+
+        if (value.valueEql(idx, .fromInt(0))) {
+            return self.tuple[0];
+        }
+
+        if (value.valueEql(idx, .fromInt(1))) {
+            return self.tuple[1];
+        }
+
+        return error.BadArgument;
     }
 
     pub fn toString(ctx: *anyopaque) args_mod.Error![]const u8 {
@@ -1322,6 +1357,8 @@ fn fGroupby(ctx: *Ctx, input: Value, args: Args) Error!Value {
             .ctx = gCtx,
             .setAttr = GroupCtx.setAttr,
             .getAttr = GroupCtx.getAttr,
+            .setItem = GroupCtx.setItem,
+            .getItem = GroupCtx.getItem,
             .toString = GroupCtx.toString,
             .toSlice = GroupCtx.toSlice,
         });

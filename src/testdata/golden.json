@@ -5410,6 +5410,34 @@
   },
   {
     "autoescape": false,
+    "context": "{\"users\": [{\"name\": \"emma\", \"city\": \"NYC\"}, {\"name\": \"smith\", \"city\": \"WA\"}, {\"name\": \"john\", \"city\": \"NYC\"}]}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "s3_groupby_docs_item",
+    "out": "NYC: emma, john;WA: smith;",
+    "status": "ok",
+    "strict": false,
+    "template": "{% for items in users|groupby('city') %}{{ items[0] }}: {% for u in items[1] %}{{ u.name }}{% if not loop.last %}, {% endif %}{% endfor %};{% endfor %}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
+    "context": "{\"users\": [{\"name\": \"emma\", \"city\": \"NYC\"}, {\"name\": \"smith\", \"city\": \"WA\"}, {\"name\": \"john\", \"city\": \"NYC\"}]}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "s3_groupby_docs_item_2",
+    "out": "NYC2: emma, john;NYC2: smith;",
+    "status": "ok",
+    "strict": false,
+    "template": "{% for items in users|groupby('city') %}{% set items[0] = 'NYC2' %}{{ items[0] }}: {% for u in items[1] %}{{ u.name }}{% if not loop.last %}, {% endif %}{% endfor %};{% endfor %}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
     "context": "{\"users\": [{\"name\": \"a\", \"city\": \"b\"}, {\"name\": \"c\", \"city\": \"a\"}, {\"name\": \"d\", \"city\": \"b\"}]}",
     "expect_error": false,
     "keep_trailing_newline": false,
@@ -5419,6 +5447,20 @@
     "status": "ok",
     "strict": false,
     "template": "{% for g in users|groupby('city') %}{{ g.grouper }}={{ g.list|length }} {% endfor %}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
+    "context": "{\"users\": [{\"name\": \"a\", \"city\": \"b\"}, {\"name\": \"c\", \"city\": \"a\"}, {\"name\": \"d\", \"city\": \"b\"}]}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "s3_groupby_attrs_2",
+    "out": "a2=1 a2=2 ",
+    "status": "ok",
+    "strict": false,
+    "template": "{% for g in users|groupby('city') %}{% set g.grouper = 'a2' %}{{ g.grouper }}={{ g.list|length }} {% endfor %}",
     "templates": {},
     "trim_blocks": false
   },
@@ -5920,6 +5962,20 @@
     "templates": {},
     "trim_blocks": false
    },
+  {
+    "autoescape": false,
+    "context": "{}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "set_slice",
+    "out": "['aa', 'bb', 'cc']",
+    "status": "ok",
+    "strict": false,
+    "template": "{% set ss = ['aa', 'bb', 'cc'] %}{{ ss }}",
+    "templates": {},
+    "trim_blocks": false
+  },
   {
    "autoescape": false,
    "context": "{\"name\": \"a\\\"b\", \"tags\": [\"x\", \"y\"]}",

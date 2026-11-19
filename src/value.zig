@@ -152,7 +152,7 @@ pub const MacroRef = struct {
     impl: *const anyopaque,
 };
 
-// For value call, have state
+// For value struct, have state
 pub const Callable = struct {
     ctx: *anyopaque,
     // For value method
