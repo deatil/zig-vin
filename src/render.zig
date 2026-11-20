@@ -1576,6 +1576,14 @@ pub const Renderer = struct {
         const items: []const Value = switch (obj) {
             .list, .tuple => |l| l,
             .string => |str| try value.chars(self.arena, str),
+            .callable => |c| {
+                if (c.toSlice) |fn_ptr| {
+                    const val = try fn_ptr(c.ctx);
+                    return .{ .list = val };
+                }
+
+                return Value.none;
+            },
             .undef => return self.fail(line, "'{s}' is undefined, so it cannot be sliced", .{obj.undef.name}, error.UndefinedValue),
             else => return error.TypeMismatch,
         };

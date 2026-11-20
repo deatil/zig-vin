@@ -454,6 +454,11 @@ pub const Value = union(enum) {
     }
 };
 
+/// Map data
+pub fn object(gpa: Allocator) !*Namespace {
+    return .create(gpa);
+}
+
 /// Build a `Value` from ordinary Zig data at comptime-known types. Structs
 /// become **ordered** maps in field-declaration order, `[]const u8` becomes a
 /// string (not a list of ints), optionals become `none` when null, enums become

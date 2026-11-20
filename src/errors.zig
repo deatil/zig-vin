@@ -20,11 +20,11 @@ pub const ValueError = error{
     BadArgument,
     /// Reached a corner this engine deliberately does not implement.
     Unsupported,
-    // for callable
+    /// for callable
     InvalidMethod,
     InvalidValue,
     InvalidExec,
-    // for return diag message
+    /// for return diag message
     DiagInvalidTemplateSyntax,
     DiagBadArgument,
 };

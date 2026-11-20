@@ -2083,3 +2083,26 @@ test "block() respects super() in inheritance" {
 
     try testing.expectEqualStrings("child+base", out);
 }
+
+test "use set item to for tag" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    
+    const data = "{\"users\": [{\"name\": \"emma\", \"city\": \"NYC\"}, {\"name\": \"smith\", \"city\": \"WA\"}, {\"name\": \"john\", \"city\": \"NYC\"}]}";
+    var jsons = try std.json.parseFromSlice(std.json.Value, alloc, data, .{});
+    defer jsons.deinit();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile(
+        \\{% for items in users|groupby('city') %}{% set items[0] = 'NYC2' %}{{ items[0] }}: {% for u in items[1] %}{{ u.name }}{% if not loop.last %}, {% endif %}{% endfor %};{% endfor %}
+    , null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFromJson(alloc, jsons.value);
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("NYC2: emma, john;NYC2: smith;", out);
+}
