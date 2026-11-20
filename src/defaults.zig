@@ -2050,7 +2050,7 @@ fn gInclude(ctx: *Ctx, args: Args) Error!Value {
     return renderIncludedExpression(r, args) catch return error.BadArgument;
 }
 
-fn renderIncludedExpression(self: *renders.Renderer, args: args_mod.Args) renders.Error!Value {
+fn renderIncludedExpression(rd: *renders.Renderer, args: args_mod.Args) renders.Error!Value {
     if (args.pos.len < 1) return error.BadArgument;
 
     var ignore_missing = false;
@@ -2066,7 +2066,7 @@ fn renderIncludedExpression(self: *renders.Renderer, args: args_mod.Args) render
     const candidates: []const Value = switch (args.pos[0]) {
         .list, .tuple => |items| items,
         else => blk: {
-            const one = try self.arena.alloc(Value, 1);
+            const one = try rd.arena.alloc(Value, 1);
             one[0] = args.pos[0];
             break :blk one;
         },
@@ -2074,19 +2074,19 @@ fn renderIncludedExpression(self: *renders.Renderer, args: args_mod.Args) render
 
     var included: ?*renders.Unit = null;
     for (candidates) |candidate| {
-        const name = try self.templateName(candidate, 0);
-        included = try self.loadUnit(name, 0);
+        const name = try rd.templateName(candidate, 0);
+        included = try rd.loadUnit(name, 0);
         if (included != null) break;
     }
 
     if (included == null) {
         if (ignore_missing) return Value.empty_string;
-        return self.fail(0, "none of the included templates could be loaded", .{}, error.TemplateNotFound);
+        return rd.fail(0, "none of the included templates could be loaded", .{}, error.TemplateNotFound);
     }
 
     const unit = included.?;
 
-    const params_frame = try self.newFrame();
+    const params_frame = try rd.newFrame();
 
     // include('partial.html', {'name': 'abs'})
     if (args.pos.len >= 2) {
@@ -2094,57 +2094,57 @@ fn renderIncludedExpression(self: *renders.Renderer, args: args_mod.Args) render
             .map => |map| {
                 for (map.pairs) |pair| {
                     if (pair.key != .string) return error.BadArgument;
-                    try params_frame.put(self.arena, pair.key.string.bytes, pair.value);
+                    try params_frame.put(rd.arena, pair.key.string.bytes, pair.value);
                 }
             },
             .namespace => |ns| {
                 for (ns.pairs.items) |pair| {
                     if (pair.key != .string) return error.BadArgument;
-                    try params_frame.put(self.arena, pair.key.string.bytes, pair.value);
+                    try params_frame.put(rd.arena, pair.key.string.bytes, pair.value);
                 }
             },
             else => return error.BadArgument,
         }
     }
 
-    var aw: Writer.Allocating = .init(self.arena);
+    var aw: Writer.Allocating = .init(rd.arena);
     var sink: renders.Counting = .{
         .inner = &aw.writer,
-        .limit = self.out.limit,
-        .written = self.out.written,
+        .limit = rd.out.limit,
+        .written = rd.out.written,
     };
 
-    const saved_out = self.out;
-    const saved_blocks = self.include_blocks;
-    const saved_ctx = self.context;
-    const saved_frames = self.frames;
+    const saved_out = rd.out;
+    const saved_blocks = rd.include_blocks;
+    const saved_ctx = rd.context;
+    const saved_frames = rd.frames;
 
-    self.out = &sink;
-    self.include_blocks = &.{};
+    rd.out = &sink;
+    rd.include_blocks = &.{};
 
     if (!with_context) {
-        self.context = .{ .map = .{ .pairs = &.{} } };
+        rd.context = .{ .map = .{ .pairs = &.{} } };
         var isolated_frames: std.ArrayList(*renders.Frame) = .empty;
-        try isolated_frames.append(self.arena, params_frame);
-        try isolated_frames.append(self.arena, try self.newFrame());
-        self.frames = isolated_frames;
+        try isolated_frames.append(rd.arena, params_frame);
+        try isolated_frames.append(rd.arena, try rd.newFrame());
+        rd.frames = isolated_frames;
     } else {
-        try self.frames.append(self.arena, params_frame);
+        try rd.frames.append(rd.arena, params_frame);
     }
 
     defer {
-        self.out = saved_out;
-        self.out.written = sink.written;
-        self.include_blocks = saved_blocks;
-        self.context = saved_ctx;
-        self.frames = saved_frames;
+        rd.out = saved_out;
+        rd.out.written = sink.written;
+        rd.include_blocks = saved_blocks;
+        rd.context = saved_ctx;
+        rd.frames = saved_frames;
     }
 
-    try self.renderNested(unit, with_context);
+    try rd.renderNested(unit, with_context);
 
     return .{ .string = .{
         .bytes = aw.written(),
-        .safe = self.opts.autoescape,
+        .safe = rd.opts.autoescape,
     } };
 }
 
