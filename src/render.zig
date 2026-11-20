@@ -205,6 +205,8 @@ pub const Renderer = struct {
     current_template: ?*Unit = null,
     /// Slot overrides active for the current `{% includes %}` render.
     include_blocks: []const ast.BlockDef = &.{},
+    /// Tracks active block() calls so recursive calls fail instead of looping forever.
+    block_call_stack: std.ArrayList([]const u8) = .empty,
 
     pub fn fail(self: *Renderer, line: usize, comptime fmt: []const u8, args: anytype, e: Error) Error {
         self.diag.set(line, fmt, args);
@@ -1341,6 +1343,9 @@ pub const Renderer = struct {
                 };
             }
 
+            if (mem.eql(u8, name, "block")) {
+                return self.doBlock(args, c.line);
+            }
             if (mem.eql(u8, name, "super") and self.block_stack.items.len != 0) {
                 return self.doSuper(c.line);
             }
@@ -1371,6 +1376,45 @@ pub const Renderer = struct {
         }
 
         return self.fail(c.line, "only the built-in globals are callable in this module", .{}, error.NotCallable);
+    }
+
+    pub fn doBlock(self: *Renderer, args: args_mod.Args, line: usize) Error!Value {
+        if (args.pos.len != 1 or args.kw.len != 0) {
+            return self.fail(line, "block() takes exactly one positional argument", .{}, error.BadArgument);
+        }
+
+        if (args.pos[0] != .string) {
+            return self.fail(line, "block() name must be a string", .{}, error.TypeMismatch);
+        }
+
+        const block_name = args.pos[0].string.bytes;
+        for (self.block_call_stack.items) |active_name| {
+            if (mem.eql(u8, active_name, block_name)) {
+                return self.fail(line, "recursive block('{s}') call", .{block_name}, error.BlockError);
+            }
+        }
+
+        try self.block_call_stack.append(self.arena, block_name);
+        defer _ = self.block_call_stack.pop();
+
+        var aw: Writer.Allocating = .init(self.arena);
+        var sink: Counting = .{
+            .inner = &aw.writer,
+            .limit = self.out.limit,
+            .written = self.out.written,
+        };
+
+        const saved_out = self.out;
+        self.out = &sink;
+        const result = self.renderBlockNamed(block_name, line);
+        self.out = saved_out;
+        self.out.written = sink.written;
+
+        try result;
+        return .{ .string = .{
+                .bytes = aw.written(),
+                .safe = self.opts.autoescape,
+        } };
     }
 
     pub fn globalRange(self: *Renderer, args: args_mod.Args, line: usize) Error!Value {

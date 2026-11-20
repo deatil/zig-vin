@@ -1858,3 +1858,228 @@ test "include expression returns an empty string for missing candidates" {
     try testing.expectEqualStrings("", out);
 }
 
+test "block() renders named block" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile(
+        \\A
+        \\{% block header %}HEADER{% endblock %}
+        \\B={{ block("header") }}
+        \\C
+    , null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("A\nHEADER\nB=HEADER\nC", out);
+}
+
+test "block() can be called repeatedly" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile(
+        \\{% block item %}[item]{% endblock %}
+        \\{{ block("item") }}|{{ block("item") }}
+    , null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("[item]\n[item]|[item]", out);
+}
+
+test "block() rejects missing arguments" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile("{{ block() }}", null);
+    defer tpl.deinit();
+
+    var diag: vin.Diagnostic = undefined;
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = tpl.render(alloc, ctx, &diag);
+
+    try testing.expectError(error.BadArgument, out);
+    try testing.expectEqualStrings(
+        "line 1: block() takes exactly one positional argument",
+        try alloc.print("{f}", .{diag}),
+    );
+}
+
+test "block() rejects non-string names" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile("{{ block(42) }}", null);
+    defer tpl.deinit();
+
+    var diag: vin.Diagnostic = undefined;
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = tpl.render(alloc, ctx, &diag);
+
+    try testing.expectError(error.TypeMismatch, out);
+    try testing.expectEqualStrings(
+        "line 1: block() name must be a string",
+        try alloc.print("{f}", .{diag}),
+    );
+}
+
+test "block() missing block returns empty string" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile("before{{ block(\"missing\") }}after", null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("beforeafter", out);
+}
+
+test "block() rejects recursive calls" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile(
+        \\{% block loop %}{{ block("loop") }}{% endblock %}
+    , null);
+    defer tpl.deinit();
+
+    var diag: vin.Diagnostic = undefined;
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = tpl.render(alloc, ctx, &diag);
+
+    try testing.expectError(error.BlockError, out);
+    try testing.expectEqualStrings(
+        "line 1: in template '<string>': recursive block('loop') call",
+        try alloc.print("{f}", .{diag}),
+    );
+}
+
+test "block() uses inheritance block chain" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var map: vin.MapLoader = .{ .entries = &.{
+        .{
+            .name = "base",
+            .source =
+            \\BASE[{% block header %}base header{% endblock %}][{{ block("header") }}]
+        ,
+        },
+        .{
+            .name = "child",
+            .source =
+            \\{% extends "base" %}
+            \\{% block header %}child header{% endblock %}
+        ,
+        },
+    } };
+
+    var env = try vin.Environment.initWithLoader(alloc, .{}, map.loader());
+    defer env.deinit();
+
+    var tpl = try env.compile(
+        \\{% extends "base" %}
+        \\{% block header %}child header{% endblock %}
+    , null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings(
+        "BASE[child header][child header]",
+        out,
+    );
+}
+
+test "block() uses repeated inheritance overrides" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var map: vin.MapLoader = .{ .entries = &.{
+        .{
+            .name = "base",
+            .source =
+            \\{% block header %}base{% endblock %}|{{ block("header") }}
+        ,
+        },
+        .{
+            .name = "child",
+            .source =
+            \\{% extends "base" %}
+            \\{% block header %}child{% endblock %}
+        ,
+        },
+    } };
+
+    var env = try vin.Environment.initWithLoader(alloc, .{}, map.loader());
+    defer env.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = try env.renderTemplateAlloc("child", ctx, null);
+
+    try testing.expectEqualStrings("child|child", out);
+}
+
+test "block() respects super() in inheritance" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var map: vin.MapLoader = .{ .entries = &.{
+        .{
+            .name = "base",
+            .source =
+            \\{% block header %}base{% endblock %}
+        ,
+        },
+        .{
+            .name = "child",
+            .source =
+            \\{% extends "base" %}
+            \\{% block header %}child+{{ super() }}{% endblock %}
+        ,
+        },
+    } };
+
+    var env = try vin.Environment.initWithLoader(alloc, .{}, map.loader());
+    defer env.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = try env.renderTemplateAlloc("child", ctx, null);
+
+    try testing.expectEqualStrings("child+base", out);
+}

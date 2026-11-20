@@ -5977,6 +5977,20 @@
     "trim_blocks": false
   },
   {
+    "autoescape": false,
+    "context": "{}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "set_slice_for",
+    "out": "aa bb cc ",
+    "status": "ok",
+    "strict": false,
+    "template": "{% set ss = ['aa', 'bb', 'cc'] %}{% for g in ss %}{{ g }} {% endfor %}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
    "autoescape": false,
    "context": "{\"name\": \"a\\\"b\", \"tags\": [\"x\", \"y\"]}",
    "expect_error": false,
