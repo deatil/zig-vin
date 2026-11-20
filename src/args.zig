@@ -6,11 +6,12 @@ const mem = std.mem;
 
 const value = @import("value.zig");
 const diag = @import("diag.zig");
+const errors = @import("errors.zig");
 
 const Value = value.Value;
 const Diagnostic = diag.Diagnostic;
 
-pub const Error = value.Error;
+pub const Error = errors.ValueError;
 
 pub const Kwarg = struct {
     name: []const u8,

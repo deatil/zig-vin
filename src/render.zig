@@ -7,50 +7,17 @@ const mem = std.mem;
 const ast = @import("ast.zig");
 const value = @import("value.zig");
 const args_mod = @import("args.zig");
+const diags = @import("diag.zig");
+const errors = @import("errors.zig");
 const loader_mod = @import("loader.zig");
 const parser = @import("parser.zig");
-const diags = @import("diag.zig");
 
 const Value = value.Value;
 const Expr = ast.Expr;
 const Node = ast.Node;
 const Diagnostic = diags.Diagnostic;
 
-pub const Error = value.Error || error{
-    /// The output exceeded `Options.max_output_bytes`.
-    OutputTooLarge,
-    /// The render's total scratch allocation exceeded
-    /// `Options.max_render_bytes`. Distinct from `OutOfMemory`: the machine
-    /// has memory, this render asked for more than it is allowed.
-    RenderBudgetExceeded,
-    /// Called something that is not callable, or a method a value does not have.
-    NotCallable,
-    /// A filter/test named at compile time vanished from the registry.
-    UnknownFilter,
-    /// A composition tag named a template the loader does not have.
-    TemplateNotFound,
-    /// A composition tag was reached with no loader configured.
-    NoLoader,
-    /// `a extends b extends a` — caught structurally, before it can recurse.
-    TemplateCycle,
-    /// A depth cap was hit: template nesting, macro calls, or `loop()`.
-    TooDeep,
-    /// A loaded template failed to compile.
-    TemplateSyntaxError,
-    /// `{% block x required %}` reached without a derived template overriding
-    /// it, or `{{ super() }}` with no parent definition.
-    BlockError,
-    /// A macro was called with arguments it does not accept.
-    BadCall,
-    /// The loader itself failed (I/O, size cap, a name it refuses).
-    LoaderFailed,
-    /// A loop body executed `{% continue %}`.
-    LoopContinue,
-    /// A loop body executed `{% break %}`.
-    LoopBreak,
-    /// A `{% while %}` tag exceeded `Options.max_while_iterations`.
-    LoopLimitExceeded,
-};
+pub const Error = errors.RenderError;
 
 pub const UndefinedPolicy = enum {
     /// Any *use* of an undefined value is an error, including rendering it.
@@ -109,10 +76,10 @@ pub const Lookup = struct {
 /// A scope. Held by POINTER everywhere (`[]const *Frame`), never by value: a
 /// macro closes over the frames it was defined in, and a hash map copied by
 /// value would be left pointing at freed storage the moment the original grew.
-const Frame = std.StringArrayHashMapUnmanaged(Value);
+pub const Frame = std.StringArrayHashMapUnmanaged(Value);
 
 /// One loaded, compiled template.
-const Unit = struct {
+pub const Unit = struct {
     name: []const u8,
     parsed: ast.Parsed,
 };
@@ -120,7 +87,7 @@ const Unit = struct {
 /// The scope a macro carries with it, allocated in the render arena so it
 /// outlives the statement that created it. `render.zig` owns every cast of
 /// `value.MacroRef.impl` to this type.
-const MacroImpl = struct {
+pub const MacroImpl = struct {
     def: *const ast.MacroDef,
     /// The frame stack visible to the body, innermost last.
     captured: []const *Frame,
@@ -135,18 +102,18 @@ const MacroImpl = struct {
 };
 
 /// The state a `{% for … recursive %}` body needs so `loop()` can re-enter it.
-const RecursiveLoop = struct {
+pub const RecursiveLoop = struct {
     def: ast.For,
     depth: usize,
 };
 
 /// A macro with no parameters and no body of its own — the shape `self.x()`
 /// needs, where the body comes from `MacroImpl.block_body`.
-const empty_macro_def: ast.MacroDef = .{ .name = "block", .params = &.{}, .body = &.{} };
+pub const empty_macro_def: ast.MacroDef = .{ .name = "block", .params = &.{}, .body = &.{} };
 
 /// One entry of the block-resolution stack, so `{{ super() }}` knows which
 /// definition it is standing on.
-const BlockFrame = struct {
+pub const BlockFrame = struct {
     name: []const u8,
     /// Index into `chain` of the definition currently rendering.
     chain_index: usize,
@@ -618,7 +585,7 @@ pub const Renderer = struct {
         return ns;
     }
 
-    fn loadIncludedUnit(
+    pub fn loadIncludedUnit(
         self: *Renderer,
         names_expr: *const Expr,
         ignore_missing: bool,

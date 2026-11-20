@@ -2,10 +2,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const mem = std.mem;
 
-pub const Error = error{
-    OutOfMemory,
-    TemplateSyntaxError,
-};
+const errors = @import("errors.zig");
+
+pub const Error = errors.LexerError;
 
 pub const Delimiters = struct {
     /// Delimiters for `{{ ... }}` output tags.

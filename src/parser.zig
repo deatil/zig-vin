@@ -5,18 +5,14 @@ const mem = std.mem;
 const lex = @import("lexer.zig");
 const ast = @import("ast.zig");
 const value = @import("value.zig");
+const errors = @import("errors.zig");
 
 const Token = lex.Token;
 const Expr = ast.Expr;
 const Node = ast.Node;
 const Value = value.Value;
 
-pub const Error = error{
-    OutOfMemory,
-    TemplateSyntaxError,
-    TooDeep,
-};
-
+pub const Error = errors.ParserError;
 pub const Diagnostic = lex.Diagnostic;
 
 /// Bounds the parser enforces on the *shape* of one template's source.
@@ -225,7 +221,7 @@ pub const Parser = struct {
         return self.failAt(line, "unknown tag");
     }
 
-    fn parseIf(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseIf(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         const cond = try ts.parseExpression(line, true);
         try ts.expectEnd(line);
@@ -234,7 +230,7 @@ pub const Parser = struct {
     }
 
     /// `{% elif %}` is the same node type as `{% if %}`, nested in `orelse_`.
-    fn parseIfTail(self: *Parser, cond: *const Expr) Error!Node {
+    pub fn parseIfTail(self: *Parser, cond: *const Expr) Error!Node {
         // An `{% elif %}` chain is a chain, not a nesting: each link recurses
         // into `parseIfTail` and produces one more `.if_` node in `orelse_`,
         // which the renderer then descends. Charged per link, released when the
@@ -261,7 +257,7 @@ pub const Parser = struct {
         return .{ .if_ = .{ .cond = cond, .body = body.nodes, .orelse_ = chain } };
     }
 
-    fn parseUnless(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseUnless(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         const cond = try ts.parseExpression(line, true);
         try ts.expectEnd(line);
@@ -269,7 +265,7 @@ pub const Parser = struct {
         try out.append(self.arena, node);
     }
 
-    fn parseUnlessTail(self: *Parser, cond: *const Expr) Error!Node {
+    pub fn parseUnlessTail(self: *Parser, cond: *const Expr) Error!Node {
         try self.nest(0);
         defer self.unnest();
 
@@ -305,7 +301,7 @@ pub const Parser = struct {
         } };
     }
 
-    fn parseCase(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseCase(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         const expr = try ts.parseExpression(line, true);
         try ts.expectEnd(line);
@@ -360,7 +356,7 @@ pub const Parser = struct {
         });
     }
 
-    fn parseFor(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseFor(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         const target = try ts.parseTarget(line, false);
         if (!ts.eatName("in")) return self.failAt(line, "expected `in` in for-tag");
@@ -386,7 +382,7 @@ pub const Parser = struct {
         } });
     }
 
-    fn parseWhile(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseWhile(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         const cond = try ts.parseExpression(line, true);
         try ts.expectEnd(line);
@@ -399,19 +395,19 @@ pub const Parser = struct {
         } });
     }
 
-    fn parseContinue(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseContinue(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         try ts.expectEnd(line);
         try out.append(self.arena, .{ .continue_ = .{ .line = line } });
     }
 
-    fn parseBreak(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseBreak(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         try ts.expectEnd(line);
         try out.append(self.arena, .{ .break_ = .{ .line = line } });
     }
 
-    fn parseSet(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseSet(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         const target = try ts.parseTarget(line, true);
         if (ts.peek()) |t| {
@@ -438,7 +434,7 @@ pub const Parser = struct {
         } });
     }
 
-    fn parseFilterBlock(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseFilterBlock(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         const chain = try ts.parseFilterChainBare(&ast.filter_block_input, line);
         try ts.expectEnd(line);
@@ -446,7 +442,7 @@ pub const Parser = struct {
         try out.append(self.arena, .{ .filter_block = .{ .filter = chain, .body = body.nodes } });
     }
 
-    fn parseWith(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseWith(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         var assigns: std.ArrayList(ast.Set) = .empty;
         while (ts.peek() != null) {
@@ -467,7 +463,7 @@ pub const Parser = struct {
         try out.append(self.arena, .{ .with = .{ .assignments = assigns.items, .body = body.nodes } });
     }
 
-    fn parseExtends(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseExtends(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         const name = try ts.parseExpression(line, true);
         try ts.expectEnd(line);
@@ -476,7 +472,7 @@ pub const Parser = struct {
         try out.append(self.arena, .{ .extends = .{ .name = name, .line = line } });
     }
 
-    fn parseBlock(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseBlock(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         const name_tok = try ts.expect(.name, line, "expected a block name");
         var scoped = false;
@@ -524,7 +520,7 @@ pub const Parser = struct {
     }
 
     /// Shared tail of include/import/from: `[with|without] context`.
-    fn parseContextModifier(self: *Parser, ts: *Stream, dflt: bool) bool {
+    pub fn parseContextModifier(self: *Parser, ts: *Stream, dflt: bool) bool {
         _ = self;
         if (ts.peek()) |t| {
             if (t.isName("with") and ts.peekAt(1) != null and ts.peekAt(1).?.isName("context")) {
@@ -539,7 +535,7 @@ pub const Parser = struct {
         return dflt;
     }
 
-    fn parseInclude(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseInclude(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         const names = try ts.parseExpression(line, true);
         var ignore_missing = false;
@@ -559,7 +555,7 @@ pub const Parser = struct {
         } });
     }
 
-    fn parseIncludes(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseIncludes(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         const names = try ts.parseExpression(line, true);
 
@@ -740,7 +736,7 @@ pub const Parser = struct {
         return params.items;
     }
 
-    fn parseMacro(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseMacro(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         const name = try ts.expect(.name, line, "expected a macro name");
         const params = try self.parseParams(&ts, line);
@@ -760,7 +756,7 @@ pub const Parser = struct {
         try out.append(self.arena, .{ .macro = .{ .def = def, .line = line } });
     }
 
-    fn parseCallBlock(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
+    pub fn parseCallBlock(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {
         var ts: Stream = .{ .toks = rest, .p = self };
         var params: []const ast.Param = &.{};
         if (ts.peek() != null and ts.peek().?.kind == .lparen) params = try self.parseParams(&ts, line);

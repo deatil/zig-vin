@@ -2043,11 +2043,117 @@ fn gNamespace(ctx: *Ctx, args: Args) Error!Value {
     return .{ .namespace = ns };
 }
 
+fn gInclude(ctx: *Ctx, args: Args) Error!Value {
+    if (args.pos.len < 1) return error.BadArgument;
+
+    const r: *renders.Renderer = @ptrCast(@alignCast(ctx.user));
+    return renderIncludedExpression(r, args) catch return error.BadArgument;
+}
+
+fn renderIncludedExpression(self: *renders.Renderer, args: args_mod.Args) renders.Error!Value {
+    if (args.pos.len < 1) return error.BadArgument;
+
+    var ignore_missing = false;
+    if (args.byName("ignore_missing")) |v| {
+        ignore_missing = v.truthy();
+    }
+
+    var with_context = true;
+    if (args.byName("with_context")) |v| {
+        with_context = v.truthy();
+    }
+
+    const candidates: []const Value = switch (args.pos[0]) {
+        .list, .tuple => |items| items,
+        else => blk: {
+            const one = try self.arena.alloc(Value, 1);
+            one[0] = args.pos[0];
+            break :blk one;
+        },
+    };
+
+    var included: ?*renders.Unit = null;
+    for (candidates) |candidate| {
+        const name = try self.templateName(candidate, 0);
+        included = try self.loadUnit(name, 0);
+        if (included != null) break;
+    }
+
+    if (included == null) {
+        if (ignore_missing) return Value.empty_string;
+        return self.fail(0, "none of the included templates could be loaded", .{}, error.TemplateNotFound);
+    }
+
+    const unit = included.?;
+
+    const params_frame = try self.newFrame();
+
+    // include('partial.html', {'name': 'abs'})
+    if (args.pos.len >= 2) {
+        switch (args.pos[1]) {
+            .map => |map| {
+                for (map.pairs) |pair| {
+                    if (pair.key != .string) return error.BadArgument;
+                    try params_frame.put(self.arena, pair.key.string.bytes, pair.value);
+                }
+            },
+            .namespace => |ns| {
+                for (ns.pairs.items) |pair| {
+                    if (pair.key != .string) return error.BadArgument;
+                    try params_frame.put(self.arena, pair.key.string.bytes, pair.value);
+                }
+            },
+            else => return error.BadArgument,
+        }
+    }
+
+    var aw: Writer.Allocating = .init(self.arena);
+    var sink: renders.Counting = .{
+        .inner = &aw.writer,
+        .limit = self.out.limit,
+        .written = self.out.written,
+    };
+
+    const saved_out = self.out;
+    const saved_blocks = self.include_blocks;
+    const saved_ctx = self.context;
+    const saved_frames = self.frames;
+
+    self.out = &sink;
+    self.include_blocks = &.{};
+
+    if (!with_context) {
+        self.context = .{ .map = .{ .pairs = &.{} } };
+        var isolated_frames: std.ArrayList(*renders.Frame) = .empty;
+        try isolated_frames.append(self.arena, params_frame);
+        try isolated_frames.append(self.arena, try self.newFrame());
+        self.frames = isolated_frames;
+    } else {
+        try self.frames.append(self.arena, params_frame);
+    }
+
+    defer {
+        self.out = saved_out;
+        self.out.written = sink.written;
+        self.include_blocks = saved_blocks;
+        self.context = saved_ctx;
+        self.frames = saved_frames;
+    }
+
+    try self.renderNested(unit, with_context);
+
+    return .{ .string = .{
+        .bytes = aw.written(),
+        .safe = self.opts.autoescape,
+    } };
+}
+
 pub const builtin_globals = [_]GlobalEntry{
     .{ .name = "cycler", .func = gCycler },
     .{ .name = "joiner", .func = gJoiner },
     .{ .name = "dict", .func = gDict },
     .{ .name = "namespace", .func = gNamespace },
+    .{ .name = "include", .func = gInclude },
 };
 
 // value methods (`s.upper()`, `d.items()`, …) 

@@ -1,13 +1,13 @@
 const std = @import("std");
 const value = @import("value.zig");
 
+const errors = @import("errors.zig");
+
+pub const Error = errors.AstError;
+
 pub const Value = value.Value;
 pub const BinOp = value.BinOp;
 pub const CmpOp = value.CmpOp;
-
-pub const Error = error{
-    TemplateSyntaxError,
-};
 
 pub const Kwarg = struct {
     name: []const u8,

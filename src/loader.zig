@@ -2,12 +2,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const mem = std.mem;
 
-pub const Error = error{
-    OutOfMemory,
-    /// The loader could not answer — an I/O failure, a file too large, a name
-    /// the loader refuses. Distinct from "not found", which is `null`.
-    LoaderFailed,
-};
+const errors = @import("errors.zig");
+
+pub const Error = errors.LoaderError;
 
 /// The seam. `load` returns the source for `name` allocated from `arena`, or
 /// `null` when there is no such template — `null` is what `ignore missing` and

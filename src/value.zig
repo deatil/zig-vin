@@ -9,28 +9,9 @@ const json = std.json;
 const unicode = std.unicode;
 
 const args = @import("args.zig");
+const errors = @import("errors.zig");
 
-pub const Error = error{
-    OutOfMemory,
-    /// An operation that an undefined value does not support.
-    UndefinedValue,
-    /// Operand types the operator does not accept (Python `TypeError`).
-    TypeMismatch,
-    DivisionByZero,
-    /// An integer left `i64`, or a construction exceeded a documented cap.
-    OutOfRange,
-    /// A filter/test/method argument was wrong in kind or count.
-    BadArgument,
-    /// Reached a corner this engine deliberately does not implement.
-    Unsupported,
-    // for callable
-    InvalidMethod,
-    InvalidValue,
-    InvalidExec,
-    // for return diag message
-    DiagInvalidTemplateSyntax,
-    DiagBadArgument,
-};
+pub const Error = errors.ValueError;
 
 /// A string plus the one bit markupsafe carries: whether it is already markup
 /// and must not be escaped again. `|safe` sets it, `|escape` produces it.

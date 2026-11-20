@@ -1788,3 +1788,73 @@ test "value escapedBytes" {
         try testing.expectEqualStrings("{'a': 'abc123', 'yy': 98}", out);
     }
 }
+
+test "include expression supports arguments and options" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var map: vin.MapLoader = .{ .entries = &.{
+        .{
+            .name = "partial",
+            .source = "{{ name }}|{{ outer }}",
+        },
+    } };
+
+    var env = try vin.Environment.initWithLoader(alloc, .{}, map.loader());
+    defer env.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{
+        .outer = "visible",
+    });
+
+    const out = try env.renderAlloc(
+        "{% set result = include('partial', {'name': 'abs'}, with_context=true) %}{{ result }}",
+        ctx,
+        null,
+    );
+    defer alloc.free(out);
+
+    try testing.expectEqualStrings("abs|visible", out);
+}
+
+test "include expression can ignore a missing template" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var map: vin.MapLoader = .{ .entries = &.{} };
+    var env = try vin.Environment.initWithLoader(alloc, .{}, map.loader());
+    defer env.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+
+    const out = try env.renderAlloc(
+        "[{% set result = include('missing', ignore_missing=true) %}{{ result }}]",
+        ctx,
+        null,
+    );
+    defer alloc.free(out);
+
+    try testing.expectEqualStrings("[]", out);
+}
+
+test "include expression returns an empty string for missing candidates" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var map: vin.MapLoader = .{ .entries = &.{} };
+    var env = try vin.Environment.initWithLoader(alloc, .{}, map.loader());
+    defer env.deinit();
+
+    const out = try env.renderAlloc(
+        "{{ include(['one', 'two'], ignore_missing=true) }}",
+        try vin.valueFrom(alloc, .{}),
+        null,
+    );
+    defer alloc.free(out);
+
+    try testing.expectEqualStrings("", out);
+}
+
