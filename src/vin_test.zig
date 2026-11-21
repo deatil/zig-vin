@@ -2160,12 +2160,12 @@ test "value any set" {
     try dict.set("ns", ns.asValue());
 
     var tpl = try env.compile(
-        \\{{ arr }}|{{ tuple }}|{{ maps }}|{{ ns }}
+        \\{{ arr }}|{{ tuple }}|{{ maps }}|{{ ns }}|{{ ns.arr }}
     , null);
     defer tpl.deinit();
 
     const ctx = try dict.asValue();
     const out = try tpl.render(alloc, ctx, null);
 
-    try testing.expectEqualStrings("['uu']|('jkl', 'qqw89', 'ytr35')|{'lo': 'kkk'}|{'arr': 'uuu'}", out);
+    try testing.expectEqualStrings("['uu']|('jkl', 'qqw89', 'ytr35')|{'lo': 'kkk'}|{'arr': 'uuu'}|uuu", out);
 }
