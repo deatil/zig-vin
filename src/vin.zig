@@ -25,9 +25,15 @@ pub const Str = value.Str;
 pub const Pair = value.Pair;
 pub const Map = value.Map;
 pub const Namespace = value.Namespace;
+pub const Dict = value.Dict;
+pub const Array = value.Array;
 pub const Callable = value.Callable;
 pub const Undefined = value.Undefined;
 
+pub const valueMaps = value.maps;
+pub const valueNamespaces = value.namespaces;
+pub const valueDict = value.dict;
+pub const valueArray = value.array;
 /// Build a `Value` from ordinary Zig data — structs become ordered maps in
 /// field order, `[]const u8` becomes a string, slices become lists.
 pub const valueFrom = value.from;

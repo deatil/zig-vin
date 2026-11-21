@@ -64,6 +64,10 @@ pub const Map = struct {
 
         return null;
     }
+
+    pub fn asValue(self: Map) Value {
+        return .{ .map = self };
+    }
 };
 
 /// A `namespace()` object: the one mutable value in the model, and the only
@@ -73,16 +77,16 @@ pub const Namespace = struct {
 
     pub const empty: Namespace = .{ .pairs = .empty };
 
-    pub fn create(gpa: Allocator) !*Namespace {
+    pub fn create(gpa: Allocator) !Namespace {
         const val_ptr = try gpa.create(Namespace);
         val_ptr.* = .{ 
             .pairs = .empty, 
         };
 
-        return val_ptr;
+        return val_ptr.*;
     }
 
-    pub fn get(self: *const Namespace, key: []const u8) ?Value {
+    pub fn get(self: Namespace, key: []const u8) ?Value {
         for (self.pairs.items) |p| switch (p.key) {
             .string => |s| if (mem.eql(u8, s.bytes, key)) return p.value,
             else => {},
@@ -99,7 +103,83 @@ pub const Namespace = struct {
             else => {},
         };
 
-        try self.pairs.append(gpa, .{ .key = .{ .string = .{ .bytes = key } }, .value = v });
+        const k: Value = .{ .string = .{ .bytes = try gpa.dupe(u8, key) } };
+        try self.pairs.append(gpa, .{ .key = k, .value = v });
+    }
+
+    pub fn asValue(self: *Namespace) Value {
+        return .{ .namespace = self };
+    }
+};
+
+pub const Dict = struct {
+    arena: Allocator,
+    pairs: std.ArrayList(Pair) = .empty,
+
+    pub fn create(gpa: Allocator) !Dict {
+        const val_ptr = try gpa.create(Dict);
+        val_ptr.* = .{ 
+            .arena = gpa,
+            .pairs = .empty, 
+        };
+
+        return val_ptr.*;
+    }
+
+    pub fn get(self: Dict, key: []const u8) ?Value {
+        for (self.pairs.items) |p| switch (p.key) {
+            .string => |s| if (mem.eql(u8, s.bytes, key)) return p.value,
+            else => {},
+        };
+        return null;
+    }
+
+    pub fn set(self: *Dict, key: []const u8, v: Value) !void {
+        for (self.pairs.items) |*p| switch (p.key) {
+            .string => |s| if (mem.eql(u8, s.bytes, key)) {
+                p.value = v;
+                return;
+            },
+            else => {},
+        };
+
+        const k: Value = .{ .string = .{ .bytes = try self.arena.dupe(u8, key) } };
+        try self.pairs.append(self.arena, .{ .key = k, .value = v });
+    }
+
+    pub fn asValue(self: *Dict) !Value {
+        const pairs = try self.pairs.clone(self.arena);
+        var ns: Namespace = .{ .pairs = pairs };
+        return .{ .namespace = &ns };
+    }
+};
+
+pub const Array = struct {
+    arena: Allocator,
+    items: std.ArrayList(Value) = .empty,
+
+    pub fn create(gpa: Allocator) !Array {
+        const val_ptr = try gpa.create(Array);
+        val_ptr.* = .{ 
+            .arena = gpa,
+            .items = .empty, 
+        };
+
+        return val_ptr.*;
+    }
+
+    pub fn append(self: *Array, v: Value) !void {
+        try self.items.append(self.arena, v);
+    }
+
+    pub fn asValue(self: *Array) !Value {
+        const list = try self.items.toOwnedSlice(self.arena);
+        return .{ .list = list };
+    }
+
+    pub fn asTupleValue(self: *Array) !Value {
+        const list = try self.items.toOwnedSlice(self.arena);
+        return .{ .tuple = list };
     }
 };
 
@@ -454,8 +534,21 @@ pub const Value = union(enum) {
     }
 };
 
-/// Map data
-pub fn object(gpa: Allocator) !*Namespace {
+pub fn maps(gpa: Allocator, pairs: []const Pair) !Map {
+    return .create(gpa, pairs);
+}
+
+pub fn namespaces(gpa: Allocator) !Namespace {
+    return .create(gpa);
+}
+
+/// Map data set
+pub fn dict(gpa: Allocator) !Dict {
+    return .create(gpa);
+}
+
+/// Array data append
+pub fn array(gpa: Allocator) !Array {
     return .create(gpa);
 }
 

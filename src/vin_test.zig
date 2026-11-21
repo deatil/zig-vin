@@ -130,9 +130,9 @@ test "DirLoader with json" {
     }
 
     {
-        var map: *vin.Namespace = try .create(a);
+        var map: vin.Namespace = try .create(a);
         try map.set(a, "name", .fromString("test name"));
-        const ctx: vin.Value = .fromNamespace(map);
+        const ctx: vin.Value = .fromNamespace(&map);
 
         const out = try env.renderTemplateAlloc("sub/show2", ctx, null);
         defer a.free(out);
@@ -2097,12 +2097,75 @@ test "use set item to for tag" {
     defer env.deinit();
 
     var tpl = try env.compile(
-        \\{% for items in users|groupby('city') %}{% set items[0] = 'NYC2' %}{{ items[0] }}: {% for u in items[1] %}{{ u.name }}{% if not loop.last %}, {% endif %}{% endfor %};{% endfor %}
+        \\{% for items in users|groupby('city') %}{% set items[1] = [{'name': 'emma22', 'city': 'NYC'}] %}{{ items[0] }}: {% for u in items[1] %}{{ u.name }}{% if not loop.last %}, {% endif %}{% endfor %};{% endfor %}
     , null);
     defer tpl.deinit();
 
     const ctx = try vin.valueFromJson(alloc, jsons.value);
     const out = try tpl.render(alloc, ctx, null);
 
-    try testing.expectEqualStrings("NYC2: emma, john;NYC2: smith;", out);
+    try testing.expectEqualStrings("NYC: emma22;WA: emma22;", out);
+}
+
+test "use set item to for tag attr" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    
+    const data = "{\"users\": [{\"name\": \"emma\", \"city\": \"NYC\"}, {\"name\": \"smith\", \"city\": \"WA\"}, {\"name\": \"john\", \"city\": \"NYC\"}]}";
+    var jsons = try std.json.parseFromSlice(std.json.Value, alloc, data, .{});
+    defer jsons.deinit();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.compile(
+        \\{% for items in users|groupby('city') %}{% set items.list = [{'name': 'emma22', 'city': 'NYC'}] %}{{ items.grouper }}: {% for u in items.list %}{{ u.name }}{% if not loop.last %}, {% endif %}{% endfor %};{% endfor %}
+    , null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFromJson(alloc, jsons.value);
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("NYC: emma22;WA: emma22;", out);
+}
+
+test "value any set" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var array = try vin.valueArray(alloc);
+    try array.append(.fromString("uu"));
+
+    var array2 = try vin.valueArray(alloc);
+    try array2.append(.fromString("jkl"));
+    try array2.append(.fromString("qqw89"));
+    try array2.append(.fromString("ytr35"));
+
+    const maps = try vin.valueMaps(alloc, &.{
+        .{ .key = .fromString("lo"), .value = .fromString("kkk") },
+    });
+
+    var ns = try vin.valueNamespaces(alloc);
+    try ns.set(alloc, "arr", .fromString("uuu"));
+
+    var dict = try vin.valueDict(alloc);
+    try dict.set("arr", try array.asValue());
+    try dict.set("tuple", try array2.asTupleValue());
+    try dict.set("maps", maps.asValue());
+    try dict.set("ns", ns.asValue());
+
+    var tpl = try env.compile(
+        \\{{ arr }}|{{ tuple }}|{{ maps }}|{{ ns }}
+    , null);
+    defer tpl.deinit();
+
+    const ctx = try dict.asValue();
+    const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("['uu']|('jkl', 'qqw89', 'ytr35')|{'lo': 'kkk'}|{'arr': 'uuu'}", out);
 }
