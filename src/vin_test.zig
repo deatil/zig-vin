@@ -2155,17 +2155,18 @@ test "value any set" {
 
     var dict = try vin.valueDict(alloc);
     try dict.set("arr", try array.asValue());
+    try dict.set("arr2", try array.asTupleValue());
     try dict.set("tuple", try array2.asTupleValue());
     try dict.set("maps", maps.asValue());
     try dict.set("ns", ns.asValue());
 
     var tpl = try env.compile(
-        \\{{ arr }}|{{ tuple }}|{{ maps }}|{{ ns }}|{{ ns.arr }}
+        \\{{ arr }}|{{ arr2 }}|{{ tuple }}|{{ maps }}|{{ ns }}|{{ ns.arr }}
     , null);
     defer tpl.deinit();
 
     const ctx = try dict.asValue();
     const out = try tpl.render(alloc, ctx, null);
 
-    try testing.expectEqualStrings("['uu']|('jkl', 'qqw89', 'ytr35')|{'lo': 'kkk'}|{'arr': 'uuu'}|uuu", out);
+    try testing.expectEqualStrings("['uu']|('uu',)|('jkl', 'qqw89', 'ytr35')|{'lo': 'kkk'}|{'arr': 'uuu'}|uuu", out);
 }

@@ -173,12 +173,14 @@ pub const Array = struct {
     }
 
     pub fn asValue(self: *Array) !Value {
-        const list = try self.items.toOwnedSlice(self.arena);
+        var items = try self.items.clone(self.arena);
+        const list = try items.toOwnedSlice(self.arena);
         return .{ .list = list };
     }
 
     pub fn asTupleValue(self: *Array) !Value {
-        const list = try self.items.toOwnedSlice(self.arena);
+        var items = try self.items.clone(self.arena);
+        const list = try items.toOwnedSlice(self.arena);
         return .{ .tuple = list };
     }
 };
