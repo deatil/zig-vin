@@ -84,7 +84,7 @@ pub fn main(init: std.process.Init) !void {
 
     var diag: vin.Diagnostic = undefined;
 
-    const out = try env.renderAlloc(alloc, tpl, ctx, &diag) catch {
+    const out = try env.execute(alloc, tpl, ctx, &diag) catch {
         const err_msg = try alloc.print("{f}", .{diag});
         std.debug.print("error: {s} \n", .{err_msg});
         return;
@@ -121,9 +121,7 @@ pub fn main(init: std.process.Init) !void {
     const dl: *vin.DirLoader = try .create(
         a, io, 
         try std.Io.Dir.cwd().openDir(io, "views", .{}), 
-        .{ 
-            .suffix = ".htm",
-        },
+        .{ .suffix = ".htm" },
     );
 
     var env = try vin.Environment.initWithLoader(alloc, .{
@@ -134,7 +132,8 @@ pub fn main(init: std.process.Init) !void {
 
     var diag: vin.Diagnostic = undefined;
 
-    const out = try env.renderTemplateAlloc(alloc, tpl, ctx, &diag) catch {
+    const tpl = "index";
+    const out = try env.render(alloc, tpl, ctx, &diag) catch {
         const err_msg = try alloc.print("{f}", .{diag});
         std.debug.print("error: {s} \n", .{err_msg});
         return;

@@ -294,8 +294,16 @@ pub const Environment = struct {
         };
     }
 
+    pub fn fromString(
+        self: *const Environment,
+        source: []const u8,
+        diag: ?*Diagnostic,
+    ) CompileError!Template {
+        return self.compile(source, diag);
+    }
+
     /// Compile and render in one step, for the one-shot case.
-    pub fn renderAlloc(
+    pub fn execute(
         self: *const Environment,
         source: []const u8,
         context: Value,
@@ -307,29 +315,41 @@ pub const Environment = struct {
         return tmpl.render(self.gpa, context, diag);
     }
 
-    pub fn compileTemplate(
+    pub fn getTemplate(
         self: *const Self,
         tpl: []const u8,
         diag: ?*Diagnostic,
     ) !Template {
+        var scratch: Diagnostic = .{};
+        var d = diag orelse &scratch;
+
         if (self.loader) |loader| {
-            const source = try loader.load(loader.ctx, self.gpa, tpl);
-            if (source) |val| {
-                const tmpl = try self.compile(val, diag);
-                return tmpl;
-            }
+            const source = loader.load(loader.ctx, self.gpa, tpl) catch |err| {
+                d.set(0, "Template '{s}' load fail", .{tpl});
+                return err;
+            };
+            if (source) |val| return self.compile(val, d);
         }
 
+        d.set(0, "Template '{s}' not found", .{tpl});
         return error.LoaderInvalid;
     }
 
-    pub fn renderTemplateAlloc(
+    pub fn fromFile(
+        self: *const Self,
+        file: []const u8,
+        diag: ?*Diagnostic,
+    ) !Template {
+        return self.getTemplate(file, diag);
+    }
+
+    pub fn render(
         self: *const Self,
         tpl: []const u8,
         context: Value,
         diag: ?*Diagnostic,
     ) ![]u8 {
-        var tmpl = try self.compileTemplate(tpl, diag);
+        var tmpl = try self.getTemplate(tpl, diag);
         defer tmpl.deinit();
 
         return tmpl.render(self.gpa, context, diag);
@@ -456,6 +476,15 @@ pub const Template = struct {
         return aw.toOwnedSlice() catch error.OutOfMemory;
     }
 
+    pub fn execute(
+        self: *const Template,
+        gpa: Allocator,
+        context: Value,
+        diag: ?*Diagnostic,
+    ) RenderError![]u8 {
+        return self.render(gpa, context, diag);
+    }
+
     /// Render into `out`. `gpa` backs a scratch arena that is released before
     /// this returns, so intermediate values never outlive the call.
     pub fn renderTo(
@@ -577,7 +606,7 @@ pub fn render(
         env.withIo(now_io);
     }
 
-    return env.renderAlloc(source, context, opts.diag);
+    return env.execute(source, context, opts.diag);
 }
 
 test {

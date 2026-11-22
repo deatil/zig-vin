@@ -26,13 +26,13 @@ test "DirLoader use dir" {
     defer env.deinit();
 
     {
-        const out = try env.renderTemplateAlloc("show", .none, null);
+        const out = try env.render("show", .none, null);
         defer a.free(out);
         try testing.expectEqualStrings("[42]", out);
     }
 
     {
-        const out = try env.renderTemplateAlloc("sub/show1", .none, null);
+        const out = try env.render("sub/show1", .none, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222]", out);
     }
@@ -41,13 +41,13 @@ test "DirLoader use dir" {
         const ctx = try vin.valueFrom(a, .{
             .name = "test name",
         });
-        const out = try env.renderTemplateAlloc("sub/show2", ctx, null);
+        const out = try env.render("sub/show2", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
 }
 
-test "MapLoader renderTemplateAlloc" {
+test "MapLoader render" {
     const alloc = testing.allocator;
 
     var arena: std.heap.ArenaAllocator = .init(alloc);
@@ -66,13 +66,13 @@ test "MapLoader renderTemplateAlloc" {
     defer env.deinit();
 
     {
-        const out = try env.renderTemplateAlloc("show", .none, null);
+        const out = try env.render("show", .none, null);
         defer a.free(out);
         try testing.expectEqualStrings("[42]", out);
     }
 
     {
-        const out = try env.renderTemplateAlloc("sub/show1", .none, null);
+        const out = try env.render("sub/show1", .none, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222]", out);
     }
@@ -81,7 +81,7 @@ test "MapLoader renderTemplateAlloc" {
         const ctx = try vin.valueFrom(a, .{
             .name = "test name",
         });
-        const out = try env.renderTemplateAlloc("sub/show2", ctx, null);
+        const out = try env.render("sub/show2", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
@@ -114,7 +114,7 @@ test "DirLoader with json" {
         const parsed = try std.json.parseFromSlice(std.json.Value, a, text, .{});
         const ctx = try vin.valueFromJson(a, parsed.value);
 
-        const out = try env.renderTemplateAlloc("sub/show2", ctx, null);
+        const out = try env.render("sub/show2", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
@@ -124,7 +124,7 @@ test "DirLoader with json" {
         try map.set(a, "name", vin.Value.fromString("test name"));
         const ctx: vin.Value = .fromNamespace(&map);
 
-        const out = try env.renderTemplateAlloc("sub/show2", ctx, null);
+        const out = try env.render("sub/show2", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
@@ -134,7 +134,7 @@ test "DirLoader with json" {
         try map.set(a, "name", .fromString("test name"));
         const ctx: vin.Value = .fromNamespace(&map);
 
-        const out = try env.renderTemplateAlloc("sub/show2", ctx, null);
+        const out = try env.render("sub/show2", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
@@ -142,7 +142,7 @@ test "DirLoader with json" {
     {
         const ctx = try vin.valueFrom(a, .{ .name = "test name", .vlans = [_]u16{ 10, 20 } });
 
-        const out = try env.renderTemplateAlloc("sub/show3", ctx, null);
+        const out = try env.render("sub/show3", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name10,20,]", out);
     }
@@ -153,7 +153,7 @@ test "DirLoader with json" {
         });
         const ctx: vin.Value = .fromMap(map);
 
-        const out = try env.renderTemplateAlloc("sub/show2", ctx, null);
+        const out = try env.render("sub/show2", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
@@ -188,7 +188,7 @@ test "DirLoader with json 2" {
         const parsed = try std.json.parseFromSlice(std.json.Value, a, text, .{});
         const ctx = try vin.valueFromJson(a, parsed.value);
 
-        const out = try env.renderTemplateAlloc("sub/show2", ctx, null);
+        const out = try env.render("sub/show2", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
@@ -218,13 +218,13 @@ test "DirLoader create" {
     {
         const ctx = try vin.valueFrom(a, .{ .name = "test name", .vlans = [_]u16{ 10, 20 } });
 
-        const out = try env.renderTemplateAlloc("sub/show3", ctx, null);
+        const out = try env.render("sub/show3", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name10,20,]", out);
     }
 }
 
-test "MapLoader renderTemplateAlloc 2" {
+test "MapLoader render 2" {
     const alloc = testing.allocator;
 
     var arena: std.heap.ArenaAllocator = .init(alloc);
@@ -244,7 +244,7 @@ test "MapLoader renderTemplateAlloc 2" {
         const ctx = try vin.valueFrom(a, .{
             .name = "test name",
         });
-        const out = try env.renderTemplateAlloc("sub/show5", ctx, null);
+        const out = try env.render("sub/show5", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
@@ -276,7 +276,7 @@ test "DirLoader create with Value create" {
             .vlans = [_]u16{ 10, 20 },
         });
 
-        const out = try env.renderTemplateAlloc("sub/show3", ctx, null);
+        const out = try env.render("sub/show3", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name10,20,]", out);
     }
@@ -568,7 +568,7 @@ test "Env addMethod set" {
     try testing.expectEqualStrings("<>{'foo': 'Text'}", out);
 }
 
-test "DynMapLoader renderTemplateAlloc" {
+test "DynMapLoader render" {
     const alloc = testing.allocator;
 
     var arena: std.heap.ArenaAllocator = .init(alloc);
@@ -587,7 +587,7 @@ test "DynMapLoader renderTemplateAlloc" {
         const ctx = try vin.valueFrom(a, .{
             .name = "test name",
         });
-        const out = try env.renderTemplateAlloc("sub/show6", ctx, null);
+        const out = try env.render("sub/show6", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("[4222==test name]", out);
     }
@@ -974,22 +974,22 @@ test "MultiLoader" {
     const ctx = try vin.valueFrom(alloc, .{});
 
     {
-        const out = try env.renderTemplateAlloc("sub2/show1", ctx, null);
+        const out = try env.render("sub2/show1", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("show1", out);
     }
     {
-        const out = try env.renderTemplateAlloc("sub2/show2", ctx, null);
+        const out = try env.render("sub2/show2", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("show2", out);
     }
     {
-        const out = try env.renderTemplateAlloc("sub2/show3", ctx, null);
+        const out = try env.render("sub2/show3", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("show3", out);
     }
     {
-        const out = env.renderTemplateAlloc("sub2/show5", ctx, null);
+        const out = env.render("sub2/show5", ctx, null);
         try testing.expectError(error.LoaderInvalid, out);
     }
 }
@@ -1528,7 +1528,7 @@ test "render with data" {
         const ctx = try vin.valueFrom(a, .{
             .name = "test-name",
         });
-        const out = try env.renderTemplateAlloc("renders/tpl", ctx, null);
+        const out = try env.render("renders/tpl", ctx, null);
         defer a.free(out);
         try testing.expectEqualStrings("tpl, test-name=base, Admin|name: test-name=base2, name: test-name", out);
     }
@@ -1539,7 +1539,7 @@ test "render with data" {
 
         var diag: vin.Diagnostic = undefined;
 
-        const out = env.renderTemplateAlloc("renders/tpl3", ctx, &diag);
+        const out = env.render("renders/tpl3", ctx, &diag);
 
         try testing.expectError(error.UndefinedValue, out);
 
@@ -1553,7 +1553,7 @@ test "render with data" {
 
         var diag: vin.Diagnostic = undefined;
 
-        const out = env.renderTemplateAlloc("renders/tpl31", ctx, &diag);
+        const out = env.render("renders/tpl31", ctx, &diag);
 
         try testing.expectError(error.UndefinedValue, out);
 
@@ -1568,7 +1568,7 @@ test "render with data" {
 
         var diag: vin.Diagnostic = undefined;
 
-        const out = env.renderTemplateAlloc("renders/tpl5", ctx, &diag);
+        const out = env.render("renders/tpl5", ctx, &diag);
 
         try testing.expectError(error.UndefinedValue, out);
 
@@ -1582,7 +1582,7 @@ test "render with data" {
 
         var diag: vin.Diagnostic = undefined;
 
-        const out = env.renderTemplateAlloc("renders/tpl5", ctx, &diag);
+        const out = env.render("renders/tpl5", ctx, &diag);
 
         try testing.expectError(error.UndefinedValue, out);
 
@@ -1597,7 +1597,7 @@ test "render with data" {
 
         var diag: vin.Diagnostic = undefined;
 
-        const out = env.renderTemplateAlloc("renders/tpl6", ctx, &diag);
+        const out = env.render("renders/tpl6", ctx, &diag);
 
         try testing.expectError(error.UndefinedValue, out);
 
@@ -1611,7 +1611,7 @@ test "render with data" {
 
         var diag: vin.Diagnostic = undefined;
 
-        const out = env.renderTemplateAlloc("renders/tpl6", ctx, &diag);
+        const out = env.render("renders/tpl6", ctx, &diag);
 
         try testing.expectError(error.UndefinedValue, out);
 
@@ -1656,7 +1656,7 @@ test "include and includes are isolated and nested includes work" {
 
     const context: vin.Value = .{ .map = .{ .pairs = &.{} } };
 
-    const regular = try env.renderAlloc(
+    const regular = try env.execute(
         "{% include 'modal' %}",
         context,
         null,
@@ -1664,7 +1664,7 @@ test "include and includes are isolated and nested includes work" {
     defer gpa.free(regular);
     try testing.expectEqualStrings("<H|B>", regular);
 
-    const with_slots = try env.renderAlloc(
+    const with_slots = try env.execute(
         "{% includes 'modal' %}" ++
             "{% block header %}head{% endblock %}" ++
             "{% block body %}x" ++
@@ -1679,7 +1679,7 @@ test "include and includes are isolated and nested includes work" {
     defer gpa.free(with_slots);
     try testing.expectEqualStrings("<head|x[nested]y>", with_slots);
 
-    const with_slots2 = try env.renderAlloc(
+    const with_slots2 = try env.execute(
         "{% includes 'modal' %}" ++
             "{% block body %}x" ++
             "{% includes 'inner' %}" ++
@@ -1808,7 +1808,7 @@ test "include expression supports arguments and options" {
         .outer = "visible",
     });
 
-    const out = try env.renderAlloc(
+    const out = try env.execute(
         "{% set result = include('partial', {'name': 'abs'}, with_context=true) %}{{ result }}",
         ctx,
         null,
@@ -1829,7 +1829,7 @@ test "include expression can ignore a missing template" {
 
     const ctx = try vin.valueFrom(alloc, .{});
 
-    const out = try env.renderAlloc(
+    const out = try env.execute(
         "[{% set result = include('missing', ignore_missing=true) %}{{ result }}]",
         ctx,
         null,
@@ -1848,7 +1848,7 @@ test "include expression returns an empty string for missing candidates" {
     var env = try vin.Environment.initWithLoader(alloc, .{}, map.loader());
     defer env.deinit();
 
-    const out = try env.renderAlloc(
+    const out = try env.execute(
         "{{ include(['one', 'two'], ignore_missing=true) }}",
         try vin.valueFrom(alloc, .{}),
         null,
@@ -2049,7 +2049,7 @@ test "block() uses repeated inheritance overrides" {
     defer env.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = try env.renderTemplateAlloc("child", ctx, null);
+    const out = try env.render("child", ctx, null);
 
     try testing.expectEqualStrings("child|child", out);
 }
@@ -2079,7 +2079,7 @@ test "block() respects super() in inheritance" {
     defer env.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = try env.renderTemplateAlloc("child", ctx, null);
+    const out = try env.render("child", ctx, null);
 
     try testing.expectEqualStrings("child+base", out);
 }
@@ -2126,6 +2126,29 @@ test "use set item to for tag attr" {
 
     const ctx = try vin.valueFromJson(alloc, jsons.value);
     const out = try tpl.render(alloc, ctx, null);
+
+    try testing.expectEqualStrings("NYC: emma22;WA: emma22;", out);
+}
+
+test "use set item to for tag attr with fromString" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    
+    const data = "{\"users\": [{\"name\": \"emma\", \"city\": \"NYC\"}, {\"name\": \"smith\", \"city\": \"WA\"}, {\"name\": \"john\", \"city\": \"NYC\"}]}";
+    var jsons = try std.json.parseFromSlice(std.json.Value, alloc, data, .{});
+    defer jsons.deinit();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var tpl = try env.fromString(
+        \\{% for items in users|groupby('city') %}{% set items.list = [{'name': 'emma22', 'city': 'NYC'}] %}{{ items.grouper }}: {% for u in items.list %}{{ u.name }}{% if not loop.last %}, {% endif %}{% endfor %};{% endfor %}
+    , null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFromJson(alloc, jsons.value);
+    const out = try tpl.execute(alloc, ctx, null);
 
     try testing.expectEqualStrings("NYC: emma22;WA: emma22;", out);
 }
@@ -2180,4 +2203,58 @@ test "value any set" {
     const out = try tpl.render(alloc, ctx, null);
 
     try testing.expectEqualStrings("['uu']|('uu',)|('jkl', 'qqw89', 'ytr35')|[True, 25, 3.25, 'ytr35', '<ytr35', '<ytr35>']|{'lo': 'kkk'}|{'arr': 'uuu', 'arr2': '<ytr35', 'arr3': '<ytr35>'}|uuu|<ytr35|<ytr35>", out);
+}
+
+test "env getTemplate and fromFile" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var map: vin.MapLoader = .{ .entries = &.{
+        .{
+            .name = "base",
+            .source =
+            \\{% block header %}base{% endblock %}
+        ,
+        },
+        .{
+            .name = "child",
+            .source =
+            \\{% extends "base" %}
+            \\{% block header %}child+{{ super() }}{% endblock %}
+        ,
+        },
+    } };
+
+    var env = try vin.Environment.initWithLoader(alloc, .{}, map.loader());
+    defer env.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+
+    {
+        var tpl = try env.getTemplate("child", null);
+        defer tpl.deinit();
+
+        const out = try tpl.render(alloc, ctx, null);
+
+        try testing.expectEqualStrings("child+base", out);
+    }
+    {
+        var tpl = try env.fromFile("child", null);
+        defer tpl.deinit();
+
+        const out = try tpl.execute(alloc, ctx, null);
+
+        try testing.expectEqualStrings("child+base", out);
+    }
+    {
+        var diag: vin.Diagnostic = .{};
+        const tpl = env.fromFile("child2", &diag);
+
+        try testing.expectError(error.LoaderInvalid, tpl);
+        try testing.expectEqualStrings(
+            "line 0: Template 'child2' not found",
+            try alloc.print("{f}", .{diag}),
+        );
+    }
 }

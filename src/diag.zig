@@ -8,10 +8,7 @@ pub const Diagnostic = struct {
     len: usize = 0,
 
     pub fn message(self: *const Diagnostic) []const u8 {
-        var len: usize = self.len;
-        if (self.len > 512) {
-            len = 511;
-        }
+        const len: usize = if (self.len < 512) self.len else 511;
         return self.buf[0..len];
     }
 
