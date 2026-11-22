@@ -84,14 +84,12 @@ pub fn main(init: std.process.Init) !void {
 
     var diag: vin.Diagnostic = undefined;
 
-    const out = try env.renderAlloc(alloc, tpl, ctx, &diag);
-    defer alloc.free(out);
-
-    const err_msg = try alloc.print("{f}", .{diag});
-    if (err_msg.len > 0) {
+    const out = try env.renderAlloc(alloc, tpl, ctx, &diag) catch {
+        const err_msg = try alloc.print("{f}", .{diag});
         std.debug.print("error: {s} \n", .{err_msg});
         return;
-    }
+    };
+    defer alloc.free(out);
 
     std.debug.print("html: {s} \n", .{out});
 }
@@ -136,14 +134,12 @@ pub fn main(init: std.process.Init) !void {
 
     var diag: vin.Diagnostic = undefined;
 
-    const out = try env.renderTemplateAlloc(alloc, tpl, ctx, &diag);
-    defer alloc.free(out);
-
-    const err_msg = try alloc.print("{f}", .{diag});
-    if (err_msg.len > 0) {
+    const out = try env.renderTemplateAlloc(alloc, tpl, ctx, &diag) catch {
+        const err_msg = try alloc.print("{f}", .{diag});
         std.debug.print("error: {s} \n", .{err_msg});
         return;
-    }
+    };
+    defer alloc.free(out);
 
     std.debug.print("html: {s} \n", .{out});
 }

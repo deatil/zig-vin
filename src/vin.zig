@@ -30,6 +30,11 @@ pub const Array = value.Array;
 pub const Callable = value.Callable;
 pub const Undefined = value.Undefined;
 
+pub const valueBool = value.booler;
+pub const valueInt = value.int;
+pub const valueFloat = value.floater;
+pub const valueString = value.string;
+pub const valueMarkup = value.markup;
 pub const valueMaps = value.maps;
 pub const valueNamespaces = value.namespaces;
 pub const valueDict = value.dict;

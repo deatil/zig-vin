@@ -321,6 +321,33 @@ fn fString(ctx: *Ctx, input: Value, args: Args) Error!Value {
     return Value.fromString(s);
 }
 
+fn fUrldecode(ctx: *Ctx, input: Value, args: Args) Error!Value {
+    _ = args;
+    const s = try ctx.toStr(input);
+    var result = std.ArrayList(u8).empty;
+    var i: usize = 0;
+    while (i < s.len) {
+        if (s[i] == '%' and i + 2 < s.len) {
+            const hex = s[i + 1 .. i + 3];
+            const byte = std.fmt.parseInt(u8, hex, 16) catch {
+                try result.append(ctx.arena, s[i]);
+                i += 1;
+                continue;
+            };
+            try result.append(ctx.arena, byte);
+            i += 3;
+        } else if (s[i] == '+') {
+            try result.append(ctx.arena, ' ');
+            i += 1;
+        } else {
+            try result.append(ctx.arena, s[i]);
+            i += 1;
+        }
+    }
+
+    return .{ .string = .{ .bytes = try result.toOwnedSlice(ctx.arena) } };
+}
+
 fn fUrlencode(ctx: *Ctx, input: Value, args: Args) Error!Value {
     _ = args;
     switch (input) {
@@ -1722,6 +1749,155 @@ fn appendPadded(
     try out.appendSlice(ctx.arena, field);
 }
 
+fn FNewlineToBr(ctx: *Ctx, input: Value, args: Args) Error!Value {
+    _ = args;
+    const s = try ctx.toStr(input);
+    var result = std.ArrayList(u8).empty;
+    for (s) |c| {
+        if (c == '\n') {
+            try result.appendSlice(ctx.arena, "<br />\n");
+        } else if (c != '\r') {
+            try result.append(ctx.arena, c);
+        }
+    }
+
+    return .{ .string = .{ .bytes = try result.toOwnedSlice(ctx.arena) } };
+}
+
+fn fAppend(ctx: *Ctx, input: Value, args: Args) Error!Value {
+    const suffix = args.get(0, "suffix") orelse return input;
+    const suffix_str = try ctx.toStr(suffix);
+    const s = try ctx.toStr(input);
+    const result = try ctx.arena.print("{s}{s}", .{ s, suffix_str });
+    return .{ .string = .{ .bytes = result } };
+}
+
+fn fPrepend(ctx: *Ctx, input: Value, args: Args) Error!Value {
+    const prefix = args.get(0, "prefix") orelse return input;
+    const prefix_str = try ctx.toStr(prefix);
+    const s = try ctx.toStr(input);
+    const result = try ctx.arena.print("{s}{s}", .{ prefix_str, s });
+    return .{ .string = .{ .bytes = result } };
+}
+
+fn fReplaceFirst(ctx: *Ctx, input: Value, args: Args) Error!Value {
+    const from = args.get(0, "from") orelse return input;
+    const to = args.get(1, "to") orelse return input;
+
+    const from_str = from.toStrings() orelse return input;
+    const to_str = to.toStrings() orelse return input;
+
+    return switch (input) {
+        .string => |s| {
+            const str = s.bytes;
+            if (std.mem.find(u8, str, from_str)) |pos| {
+                const result = try ctx.arena.print("{s}{s}{s}", .{ str[0..pos], to_str, str[pos + from_str.len ..] });
+                return .{ .string = .{ .bytes = result } };
+            }
+            return .{ .string = .{ .bytes = try ctx.arena.dupe(u8, str) } };
+        },
+        else => input,
+    };
+}
+
+fn fReplaceLast(ctx: *Ctx, input: Value, args: Args) Error!Value {
+    const from = args.get(0, "from") orelse return input;
+    const to = args.get(1, "to") orelse return input;
+
+    const from_str = from.toStrings() orelse return input;
+    const to_str = to.toStrings() orelse return input;
+
+    return switch (input) {
+        .string => |s| {
+            const str = s.bytes;
+            if (std.mem.findLast(u8, str, from_str)) |pos| {
+                const result = try ctx.arena.print("{s}{s}{s}", .{ str[0..pos], to_str, str[pos + from_str.len ..] });
+                return .{ .string = .{ .bytes = result } };
+            }
+            return .{ .string = .{ .bytes = try ctx.arena.dupe(u8, str) } };
+        },
+        else => input,
+    };
+}
+
+fn fStrip(ctx: *Ctx, input: Value, _: Args) Error!Value {
+    const s = try ctx.toStr(input);
+    const trimmed = std.mem.trim(u8, s, " \t\r\n");
+    const result = try ctx.arena.dupe(u8, trimmed);
+    return .{ .string = .{ .bytes = result } };
+}
+
+fn fLstrip(ctx: *Ctx, input: Value, _: Args) Error!Value {
+    const s = try ctx.toStr(input);
+    const trimmed = std.mem.trimStart(u8, s, " \t\r\n");
+    const result = try ctx.arena.dupe(u8, trimmed);
+    return .{ .string = .{ .bytes = result } };
+}
+
+fn fRstrip(ctx: *Ctx, input: Value, _: Args) Error!Value {
+    const s = try ctx.toStr(input);
+    const trimmed = std.mem.trimEnd(u8, s, " \t\r\n");
+    const result = try ctx.arena.dupe(u8, trimmed);
+    return .{ .string = .{ .bytes = result } };
+}
+
+fn fStripHtml(ctx: *Ctx, input: Value, _: Args) Error!Value {
+    const s = try ctx.toStr(input);
+    var result = std.ArrayList(u8).empty;
+    var in_tag = false;
+    for (s) |c| {
+        switch (c) {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            else => if (!in_tag) try result.append(ctx.arena, c),
+        }
+    }
+
+    return .{ .string = .{ .bytes = try result.toOwnedSlice(ctx.arena) } };
+}
+
+fn fStripNewlines(ctx: *Ctx, input: Value, _: Args) Error!Value {
+    const s = try ctx.toStr(input);
+    var result = std.ArrayList(u8).empty;
+    for (s) |c| {
+        if (c != '\n' and c != '\r') try result.append(ctx.arena, c);
+    }
+
+    return .{ .string = .{ .bytes = try result.toOwnedSlice(ctx.arena) } };
+}
+
+fn fTruncatewords(ctx: *Ctx, input: Value, args: Args) Error!Value {
+    const length_v = args.get(0, "length") orelse Value.fromInt(15);
+    const length: usize = if (length_v.toInt()) |li| @as(usize, @intCast(li)) else 15;
+    const ellipsis = if (args.get(1, "ellipsis")) |e| (e.toStrings() orelse "...") else "...";
+
+    return switch (input) {
+        .string => |ss| {
+            const s = ss.bytes;
+            var word_count: usize = 0;
+            var i: usize = 0;
+            var in_word = false;
+            while (i < s.len) : (i += 1) {
+                if (s[i] == ' ' or s[i] == '\t' or s[i] == '\n' or s[i] == '\r') {
+                    if (in_word) {
+                        word_count += 1;
+                        if (word_count == length) break;
+                    }
+                    in_word = false;
+                } else {
+                    in_word = true;
+                }
+            }
+            if (word_count < length and in_word) word_count += 1;
+            if (word_count <= length and i == s.len)  return .{ .string = .{ .bytes = try ctx.arena.dupe(u8, s) } };
+            
+            const result = try ctx.arena.print("{s}{s}", .{ s[0..i], ellipsis });
+            return .{ .string = .{ .bytes = result } };
+        },
+        else => input,
+    };
+}
+
 pub const builtin_filters = [_]FilterEntry{
     .{ .name = "abs", .func = fAbs },
     .{ .name = "batch", .func = fBatch },
@@ -1766,6 +1942,7 @@ pub const builtin_filters = [_]FilterEntry{
     .{ .name = "truncate", .func = fTruncate },
     .{ .name = "unique", .func = fUnique },
     .{ .name = "upper", .func = fUpper },
+    .{ .name = "urldecode", .func = fUrldecode },
     .{ .name = "urlencode", .func = fUrlencode },
     .{ .name = "wordcount", .func = fWordcount },
     .{ .name = "xmlattr", .func = fXmlattr },
@@ -1773,6 +1950,17 @@ pub const builtin_filters = [_]FilterEntry{
     .{ .name = "filesizeformat", .func = fFilesizeformat },
     .{ .name = "groupby", .func = fGroupby },
     .{ .name = "format", .func = fFormat },
+    .{ .name = "newline_to_br", .func = FNewlineToBr },
+    .{ .name = "append", .func = fAppend },
+    .{ .name = "prepend", .func = fPrepend },
+    .{ .name = "replace_first", .func = fReplaceFirst },
+    .{ .name = "replace_last", .func = fReplaceLast },
+    .{ .name = "strip", .func = fStrip },
+    .{ .name = "lstrip", .func = fLstrip },
+    .{ .name = "rstrip", .func = fRstrip },
+    .{ .name = "strip_html", .func = fStripHtml },
+    .{ .name = "strip_newlines", .func = fStripNewlines },
+    .{ .name = "truncatewords", .func = fTruncatewords },
 };
 
 // tests 

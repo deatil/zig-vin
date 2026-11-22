@@ -2146,27 +2146,38 @@ test "value any set" {
     try array2.append(.fromString("qqw89"));
     try array2.append(.fromString("ytr35"));
 
+    var array3 = try vin.valueArray(alloc);
+    try array3.append(vin.valueBool(true));
+    try array3.append(vin.valueInt(25));
+    try array3.append(vin.valueFloat(3.25));
+    try array3.append(vin.valueString("ytr35"));
+    try array3.append(vin.valueString("<ytr35"));
+    try array3.append(vin.valueMarkup("<ytr35>"));
+
     const maps = try vin.valueMaps(alloc, &.{
         .{ .key = .fromString("lo"), .value = .fromString("kkk") },
     });
 
     var ns = try vin.valueNamespaces(alloc);
     try ns.set(alloc, "arr", .fromString("uuu"));
+    try ns.set(alloc, "arr2", vin.valueString("<ytr35"));
+    try ns.set(alloc, "arr3", vin.valueMarkup("<ytr35>"));
 
     var dict = try vin.valueDict(alloc);
     try dict.set("arr", try array.asValue());
     try dict.set("arr2", try array.asTupleValue());
     try dict.set("tuple", try array2.asTupleValue());
+    try dict.set("arr3", try array3.asValue());
     try dict.set("maps", maps.asValue());
     try dict.set("ns", ns.asValue());
 
     var tpl = try env.compile(
-        \\{{ arr }}|{{ arr2 }}|{{ tuple }}|{{ maps }}|{{ ns }}|{{ ns.arr }}
+        \\{{ arr }}|{{ arr2 }}|{{ tuple }}|{{ arr3 }}|{{ maps }}|{{ ns }}|{{ ns.arr }}|{{ ns.arr2 }}|{{ ns.arr3 }}
     , null);
     defer tpl.deinit();
 
     const ctx = try dict.asValue();
     const out = try tpl.render(alloc, ctx, null);
 
-    try testing.expectEqualStrings("['uu']|('uu',)|('jkl', 'qqw89', 'ytr35')|{'lo': 'kkk'}|{'arr': 'uuu'}|uuu", out);
+    try testing.expectEqualStrings("['uu']|('uu',)|('jkl', 'qqw89', 'ytr35')|[True, 25, 3.25, 'ytr35', '<ytr35', '<ytr35>']|{'lo': 'kkk'}|{'arr': 'uuu', 'arr2': '<ytr35', 'arr3': '<ytr35>'}|uuu|<ytr35|<ytr35>", out);
 }

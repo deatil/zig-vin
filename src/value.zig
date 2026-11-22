@@ -536,6 +536,26 @@ pub const Value = union(enum) {
     }
 };
 
+pub fn booler(boolean: bool) Value {
+    return .fromBool(boolean);
+}
+
+pub fn int(integer: i64) Value {
+    return .fromInt(integer);
+}
+
+pub fn floater(float: f64) Value {
+    return .fromFloat(float);
+}
+
+pub fn string(bytes: []const u8) Value {
+    return .fromString(bytes);
+}
+
+pub fn markup(bytes: []const u8) Value {
+    return .fromMarkup(bytes);
+}
+
 pub fn maps(gpa: Allocator, pairs: []const Pair) !Map {
     return .create(gpa, pairs);
 }
