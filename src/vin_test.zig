@@ -1266,7 +1266,7 @@ const TestBA2 = struct {
         _ = fctx;
 
         const self: *TestBA2 = @ptrCast(@alignCast(ctx));
-        
+
         if (std.mem.eql(u8, name, "abc")) {
             return .fromString(self.name);
         }
@@ -1351,7 +1351,7 @@ const TestBA3 = struct {
         _ = fctx;
 
         const self: *TestBA3 = @ptrCast(@alignCast(ctx));
-        
+
         const name: vin.Value = .fromString("abb");
         if (vin.value.valueEql(name, idx)) {
             return .fromString(self.name);
@@ -1411,8 +1411,8 @@ test "value callable getItem" {
     });
     const out = try tpl.render(ctx, null);
 
-    const expect = "<>test-data,ddddddd6" ++ 
-        "|test-data2,ddddddd7" ++ 
+    const expect = "<>test-data,ddddddd6" ++
+        "|test-data2,ddddddd7" ++
         "|12,7" ++
         "|3.5,9.5";
     try testing.expectEqualStrings(expect, out);
@@ -1692,7 +1692,7 @@ test "include and includes are isolated and nested includes work" {
             "{% block body %}nested{% endblock %}" ++
             "{% endincludes %}" ++
             "y{% endblock %}" ++
-        "{% endincludes %}",
+            "{% endincludes %}",
         context,
         null,
     );
@@ -1705,7 +1705,7 @@ test "include and includes are isolated and nested includes work" {
             "{% includes 'inner' %}" ++
             "{% endincludes %}" ++
             "y{% endblock %}" ++
-        "{% endincludes %}",
+            "{% endincludes %}",
         context,
         null,
     );
@@ -1799,7 +1799,7 @@ test "value escapedBytes" {
         var arena: std.heap.ArenaAllocator = .init(testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        
+
         const v = try value.from(a, .{
             .a = "abc123",
             .yy = 98,
@@ -2015,14 +2015,14 @@ test "block() uses inheritance block chain" {
             .name = "base",
             .source =
             \\BASE[{% block header %}base header{% endblock %}][{{ block("header") }}]
-        ,
+            ,
         },
         .{
             .name = "child",
             .source =
             \\{% extends "base" %}
             \\{% block header %}child header{% endblock %}
-        ,
+            ,
         },
     } };
 
@@ -2054,14 +2054,14 @@ test "block() uses repeated inheritance overrides" {
             .name = "base",
             .source =
             \\{% block header %}base{% endblock %}|{{ block("header") }}
-        ,
+            ,
         },
         .{
             .name = "child",
             .source =
             \\{% extends "base" %}
             \\{% block header %}child{% endblock %}
-        ,
+            ,
         },
     } };
 
@@ -2084,14 +2084,14 @@ test "block() respects super() in inheritance" {
             .name = "base",
             .source =
             \\{% block header %}base{% endblock %}
-        ,
+            ,
         },
         .{
             .name = "child",
             .source =
             \\{% extends "base" %}
             \\{% block header %}child+{{ super() }}{% endblock %}
-        ,
+            ,
         },
     } };
 
@@ -2108,7 +2108,7 @@ test "use set item to for tag" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const alloc = arena.allocator();
-    
+
     const data = "{\"users\": [{\"name\": \"emma\", \"city\": \"NYC\"}, {\"name\": \"smith\", \"city\": \"WA\"}, {\"name\": \"john\", \"city\": \"NYC\"}]}";
     var jsons = try std.json.parseFromSlice(std.json.Value, alloc, data, .{});
     defer jsons.deinit();
@@ -2131,7 +2131,7 @@ test "use set item to for tag attr" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const alloc = arena.allocator();
-    
+
     const data = "{\"users\": [{\"name\": \"emma\", \"city\": \"NYC\"}, {\"name\": \"smith\", \"city\": \"WA\"}, {\"name\": \"john\", \"city\": \"NYC\"}]}";
     var jsons = try std.json.parseFromSlice(std.json.Value, alloc, data, .{});
     defer jsons.deinit();
@@ -2154,7 +2154,7 @@ test "use set item to for tag attr with fromString" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const alloc = arena.allocator();
-    
+
     const data = "{\"users\": [{\"name\": \"emma\", \"city\": \"NYC\"}, {\"name\": \"smith\", \"city\": \"WA\"}, {\"name\": \"john\", \"city\": \"NYC\"}]}";
     var jsons = try std.json.parseFromSlice(std.json.Value, alloc, data, .{});
     defer jsons.deinit();
@@ -2235,14 +2235,14 @@ test "env getTemplate and fromFile" {
             .name = "base",
             .source =
             \\{% block header %}base{% endblock %}
-        ,
+            ,
         },
         .{
             .name = "child",
             .source =
             \\{% extends "base" %}
             \\{% block header %}child+{{ super() }}{% endblock %}
-        ,
+            ,
         },
     } };
 
@@ -2290,7 +2290,7 @@ fn greet8_fn(ctx: *vin.Ctx, args: vin.Args) vin.ArgsError!vin.Value {
     const d2 = ctx.toFloat(name2_val) catch return error.BadArgument;
     const d3 = ctx.toBool(name3_val);
 
-    const out = try ctx.arena.print("{s}-{d}-{}-{}", .{s, d1, d2, d3});
+    const out = try ctx.arena.print("{s}-{d}-{}-{}", .{ s, d1, d2, d3 });
     return .{ .string = .{ .bytes = out, .safe = false } };
 }
 

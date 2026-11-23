@@ -26,11 +26,11 @@ pub const Pair = struct {
 
     pub fn create(gpa: Allocator, key: []const u8, v: Value) !Pair {
         const val_ptr = try gpa.create(Pair);
-        val_ptr.* = .{ 
-            .key = .{ 
+        val_ptr.* = .{
+            .key = .{
                 .string = .{ .bytes = try gpa.dupe(u8, key) },
-            }, 
-            .value = v, 
+            },
+            .value = v,
         };
 
         return val_ptr.*;
@@ -49,8 +49,8 @@ pub const Map = struct {
 
     pub fn create(gpa: Allocator, pairs: []const Pair) !Map {
         const val_ptr = try gpa.create(Map);
-        val_ptr.* = .{ 
-            .pairs = pairs, 
+        val_ptr.* = .{
+            .pairs = pairs,
         };
 
         return val_ptr.*;
@@ -79,8 +79,8 @@ pub const Namespace = struct {
 
     pub fn create(gpa: Allocator) !Namespace {
         const val_ptr = try gpa.create(Namespace);
-        val_ptr.* = .{ 
-            .pairs = .empty, 
+        val_ptr.* = .{
+            .pairs = .empty,
         };
 
         return val_ptr.*;
@@ -118,9 +118,9 @@ pub const Dict = struct {
 
     pub fn create(gpa: Allocator) !Dict {
         const val_ptr = try gpa.create(Dict);
-        val_ptr.* = .{ 
+        val_ptr.* = .{
             .arena = gpa,
-            .pairs = .empty, 
+            .pairs = .empty,
         };
 
         return val_ptr.*;
@@ -160,9 +160,9 @@ pub const Array = struct {
 
     pub fn create(gpa: Allocator) !Array {
         const val_ptr = try gpa.create(Array);
-        val_ptr.* = .{ 
+        val_ptr.* = .{
             .arena = gpa,
-            .items = .empty, 
+            .items = .empty,
         };
 
         return val_ptr.*;

@@ -1339,7 +1339,7 @@ pub const Renderer = struct {
                 return fn_ptr(&ctx, args) catch |err| switch (err) {
                     error.DiagInvalidTemplateSyntax, error.DiagBadArgument => {
                         const msg = self.arena.print("{s}", .{ctx.diag.message()}) catch return error.BadCall;
-                        return self.fail(c.line, "'{s}' call error: {s}", .{name, msg}, err);
+                        return self.fail(c.line, "'{s}' call error: {s}", .{ name, msg }, err);
                     },
                     else => return self.fail(c.line, "'{s}' call fail", .{name}, err),
                 };
@@ -1414,8 +1414,8 @@ pub const Renderer = struct {
 
         try result;
         return .{ .string = .{
-                .bytes = aw.written(),
-                .safe = self.opts.autoescape,
+            .bytes = aw.written(),
+            .safe = self.opts.autoescape,
         } };
     }
 
@@ -1656,7 +1656,7 @@ pub const Renderer = struct {
             return fn_ptr(&ctx, obj, args) catch |err| switch (err) {
                 error.DiagInvalidTemplateSyntax, error.DiagBadArgument => {
                     const msg = self.arena.print("{s}", .{ctx.diag.message()}) catch return error.BadCall;
-                    return self.fail(line, "'{s}' method call error: {s}", .{name, msg}, err);
+                    return self.fail(line, "'{s}' method call error: {s}", .{ name, msg }, err);
                 },
                 else => return self.fail(line, "'{s}' method call fail", .{name}, err),
             };

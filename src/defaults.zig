@@ -1271,7 +1271,7 @@ const GroupCtx = struct {
         _ = fctx;
 
         const self: *GroupCtx = @ptrCast(@alignCast(ctx));
-        
+
         if (groupAttr(self.tuple, name)) |v| {
             return v;
         }
@@ -1532,8 +1532,7 @@ fn parseFormatDigits(fmt: []const u8, pos: *usize) Error!usize {
 
 fn isNumericConversion(conversion: u8) bool {
     return switch (conversion) {
-        'd', 'i', 'u', 'o', 'x', 'X',
-        'e', 'E', 'f', 'F', 'g', 'G' => true,
+        'd', 'i', 'u', 'o', 'x', 'X', 'e', 'E', 'f', 'F', 'g', 'G' => true,
         else => false,
     };
 }
@@ -1889,8 +1888,8 @@ fn fTruncatewords(ctx: *Ctx, input: Value, args: Args) Error!Value {
                 }
             }
             if (word_count < length and in_word) word_count += 1;
-            if (word_count <= length and i == s.len)  return .{ .string = .{ .bytes = try ctx.arena.dupe(u8, s) } };
-            
+            if (word_count <= length and i == s.len) return .{ .string = .{ .bytes = try ctx.arena.dupe(u8, s) } };
+
             const result = try ctx.arena.print("{s}{s}", .{ s[0..i], ellipsis });
             return .{ .string = .{ .bytes = result } };
         },
@@ -1963,7 +1962,7 @@ pub const builtin_filters = [_]FilterEntry{
     .{ .name = "truncatewords", .func = fTruncatewords },
 };
 
-// tests 
+// tests
 
 fn tDefined(ctx: *Ctx, input: Value, args: Args) Error!bool {
     _ = ctx;
@@ -2344,13 +2343,13 @@ pub const builtin_globals = [_]GlobalEntry{
     .{ .name = "include", .func = gInclude },
 };
 
-// value methods (`s.upper()`, `d.items()`, …) 
+// value methods (`s.upper()`, `d.items()`, …)
 
 fn stringMethod(ctx: *Ctx, input: Value, name: []const u8, args: Args) Error!Value {
     if (input != .string) {
         return error.Unsupported;
     }
-    
+
     const s = input.string;
     if (mem.eql(u8, name, "upper")) return fUpper(ctx, input, args);
     if (mem.eql(u8, name, "lower")) return fLower(ctx, input, args);
@@ -2578,7 +2577,7 @@ const IncrementCtx = struct {
         var r: *renders.Renderer = @ptrCast(@alignCast(render));
 
         const ctx_name = r.arena.print("__vin_increment_{s}", .{self.name}) catch return error.TemplateSyntaxError;
-        
+
         var next: Value = undefined;
         if (r.environments.get(ctx_name)) |old| {
             if (old == .integer) {
