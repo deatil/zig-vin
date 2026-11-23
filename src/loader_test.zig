@@ -162,7 +162,7 @@ fn renderBombErr(
     var env = vin.Environment.initWithLoader(gpa, .{ .undefined_policy = .lenient }, map.loader()) catch |e| return e;
     defer env.deinit();
 
-    var tmpl = env.compile(src, null) catch |e| return e;
+    var tmpl = env.parse(src, null) catch |e| return e;
     defer tmpl.deinit();
 
     const out = tmpl.render(.{ .map = .{ .pairs = &.{} } }, null) catch |e| return e;

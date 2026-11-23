@@ -144,6 +144,35 @@ pub fn main(init: std.process.Init) !void {
 ~~~
 
 
+### Example
+
+```html
+{% extends 'base' %}
+
+{% import 'macros' as m %}
+
+{% block interfaces %}
+<div class="box">
+    <ul>
+    {% for i in interfaces %}
+        <li>
+            {{- m.iface(i.name, i.addr, i.mask) -}}
+        </li>
+    {% endfor %}
+    </ul>
+</div>
+{% endblock %}
+
+{% block routing %}
+{{ super() }}
+
+<div class="route">
+    ip routing
+</div>
+{% endblock %}
+```
+
+
 ### LICENSE
 
 *  The library LICENSE is `Apache2`, using the library need keep the LICENSE.

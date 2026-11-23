@@ -255,7 +255,7 @@ pub const Environment = struct {
     /// Parse `source` into a reusable `Template`. The template copies the
     /// source, so `source` need not outlive the call. `diag` (optional) is
     /// filled in on `error.TemplateSyntaxError`.
-    pub fn compile(
+    pub fn parse(
         self: *const Environment,
         source: []const u8,
         diag: ?*Diagnostic,
@@ -301,7 +301,7 @@ pub const Environment = struct {
         source: []const u8,
         diag: ?*Diagnostic,
     ) CompileError!Template {
-        return self.compile(source, diag);
+        return self.parse(source, diag);
     }
 
     /// Compile and render in one step, for the one-shot case.
@@ -311,7 +311,7 @@ pub const Environment = struct {
         context: Value,
         diag: ?*Diagnostic,
     ) Error![]u8 {
-        var tmpl = try self.compile(source, diag);
+        var tmpl = try self.parse(source, diag);
         defer tmpl.deinit();
 
         return tmpl.render(context, diag);
@@ -332,7 +332,7 @@ pub const Environment = struct {
             };
 
             if (source) |val| {
-                var tmpl = try self.compile(val, d);
+                var tmpl = try self.parse(val, d);
                 tmpl.template_name = tpl;
                 return tmpl;
             }
@@ -610,9 +610,7 @@ pub fn render(
     var env = try Environment.init(gpa, opts.options);
     defer env.deinit();
 
-    if (opts.io) |now_io| {
-        env.withIo(now_io);
-    }
+    if (opts.io) |io| env.withIo(io);
 
     return env.execute(source, context, opts.diag);
 }

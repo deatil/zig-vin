@@ -295,7 +295,7 @@ have `items` `keys` `values` `get`; lists have `count` `index`; `loop` has
 
 ```zig
 var diag: vin.Diagnostic = .{};
-var tmpl = env.compile(src, &diag) catch {
+var tmpl = env.parse(src, &diag) catch {
     std.debug.print("template error: {f}\n", .{&diag});   // "line 12: unknown filter — …"
     return;
 };

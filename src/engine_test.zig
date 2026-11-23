@@ -40,7 +40,7 @@ test "an unknown filter is a COMPILE error, never a render-time surprise" {
     var env = try vin.Environment.init(gpa, .{});
     defer env.deinit();
     var diag: vin.Diagnostic = .{};
-    try testing.expectError(error.TemplateSyntaxError, env.compile("{{ x|nosuchfilter }}", &diag));
+    try testing.expectError(error.TemplateSyntaxError, env.parse("{{ x|nosuchfilter }}", &diag));
     try testing.expect(std.mem.find(u8, diag.message(), "unknown filter") != null);
 }
 
@@ -48,7 +48,7 @@ test "an unknown test is a compile error too" {
     const gpa = testing.allocator;
     var env = try vin.Environment.init(gpa, .{});
     defer env.deinit();
-    try testing.expectError(error.TemplateSyntaxError, env.compile("{% if x is nosuchtest %}{% endif %}", null));
+    try testing.expectError(error.TemplateSyntaxError, env.parse("{% if x is nosuchtest %}{% endif %}", null));
 }
 
 test "the tags that remain unimplemented are named as such, not as typos" {
@@ -60,7 +60,7 @@ test "the tags that remain unimplemented are named as such, not as typos" {
         "{% autoescape true %}{% endautoescape %}",
     }) |src| {
         var diag: vin.Diagnostic = .{};
-        try testing.expectError(error.TemplateSyntaxError, env.compile(src, &diag));
+        try testing.expectError(error.TemplateSyntaxError, env.parse(src, &diag));
         try testing.expect(std.mem.find(u8, diag.message(), "unknown tag") != null);
     }
 }
@@ -86,7 +86,7 @@ test "diagnostics carry the line the problem is on" {
     var env = try vin.Environment.init(gpa, .{});
     defer env.deinit();
     var diag: vin.Diagnostic = .{};
-    try testing.expectError(error.TemplateSyntaxError, env.compile("a\nb\n{% wat %}\n", &diag));
+    try testing.expectError(error.TemplateSyntaxError, env.parse("a\nb\n{% wat %}\n", &diag));
     try testing.expectEqual(@as(usize, 3), diag.line);
 }
 
@@ -94,7 +94,7 @@ test "a render-time diagnostic names the undefined variable" {
     const gpa = testing.allocator;
     var env = try vin.Environment.init(gpa, .{});
     defer env.deinit();
-    var tmpl = try env.compile("x\n{{ missing }}", null);
+    var tmpl = try env.parse("x\n{{ missing }}", null);
     defer tmpl.deinit();
     var diag: vin.Diagnostic = .{};
     try testing.expectError(error.UndefinedValue, tmpl.render(.{ .map = .{ .pairs = &.{} } }, &diag));
@@ -149,7 +149,7 @@ test "a compiled template is reusable across renders" {
     const gpa = testing.allocator;
     var env = try vin.Environment.init(gpa, .{});
     defer env.deinit();
-    var tmpl = try env.compile("{{ n }}", null);
+    var tmpl = try env.parse("{{ n }}", null);
     defer tmpl.deinit();
 
     var arena: std.heap.ArenaAllocator = .init(gpa);
@@ -167,7 +167,7 @@ test "renderTo writes into a caller-owned writer" {
     const gpa = testing.allocator;
     var env = try vin.Environment.init(gpa, .{});
     defer env.deinit();
-    var tmpl = try env.compile("hello {{ who }}", null);
+    var tmpl = try env.parse("hello {{ who }}", null);
     defer tmpl.deinit();
 
     var arena: std.heap.ArenaAllocator = .init(gpa);
@@ -236,7 +236,7 @@ test "an unterminated tag is rejected rather than swallowing the rest" {
         "{% raw %}no end",
         "{{ 'unterminated }}",
     }) |src| {
-        try testing.expectError(error.TemplateSyntaxError, env.compile(src, null));
+        try testing.expectError(error.TemplateSyntaxError, env.parse(src, null));
     }
 }
 
@@ -298,7 +298,7 @@ test "a Template stays immutable across renders that load other templates" {
     var env = try vin.Environment.initWithLoader(gpa, .{}, map.loader());
     defer env.deinit();
 
-    var tmpl = try env.compile("{% include 'row' %}{% include 'row' %}", null);
+    var tmpl = try env.parse("{% include 'row' %}{% include 'row' %}", null);
     defer tmpl.deinit();
 
     var arena: std.heap.ArenaAllocator = .init(gpa);
@@ -407,7 +407,7 @@ test "nesting deeper than the bound is a named error, not a stack overflow" {
         const src = try nestedSrc(gpa, c.parts, 20_000);
         defer gpa.free(src);
         var diag: vin.Diagnostic = .{};
-        if (env.compile(src, &diag)) |tmpl| {
+        if (env.parse(src, &diag)) |tmpl| {
             var m = tmpl;
             m.deinit();
             std.debug.print("\n{s} nested 20000 deep compiled instead of being refused\n", .{c.what});
@@ -426,7 +426,7 @@ test "the nesting bound bites AT the bound, not somewhere past it" {
         // Exactly at the limit: compiles.
         const ok_src = try nestedSrc(gpa, c.parts, c.fits_at_32);
         defer gpa.free(ok_src);
-        var ok = env.compile(ok_src, null) catch |e| {
+        var ok = env.parse(ok_src, null) catch |e| {
             std.debug.print("\n{s} at n={d} was refused ({s}); the bound is off by one\n", .{ c.what, c.fits_at_32, @errorName(e) });
             return error.BoundTooTight;
         };
@@ -436,7 +436,7 @@ test "the nesting bound bites AT the bound, not somewhere past it" {
         // ten times the cap proves only that something eventually stops.
         const bad_src = try nestedSrc(gpa, c.parts, c.fits_at_32 + 1);
         defer gpa.free(bad_src);
-        if (env.compile(bad_src, null)) |tmpl| {
+        if (env.parse(bad_src, null)) |tmpl| {
             var m = tmpl;
             m.deinit();
             std.debug.print("\n{s} at n={d} compiled; the bound is off by one\n", .{ c.what, c.fits_at_32 + 1 });

@@ -322,7 +322,7 @@ test "Env addGlobal" {
     try env.addGlobal("greet", greet_fn);
     try env.addGlobal("greet2", greet2_fn);
 
-    var tpl = try env.compile("\\{{ greet('Alice') }}={{ greet2('Blue', 33) }}", null);
+    var tpl = try env.parse("\\{{ greet('Alice') }}={{ greet2('Blue', 33) }}", null);
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
@@ -341,7 +341,7 @@ test "Env addGlobal 2" {
 
     try env.addGlobal("greet3", greet3_fn);
 
-    var tpl = try env.compile("<{{ greet3(tul=23678, name='Text') }}", null);
+    var tpl = try env.parse("<{{ greet3(tul=23678, name='Text') }}", null);
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
@@ -360,7 +360,7 @@ test "Env addGlobal fail" {
 
     try env.addGlobal("greet3", greet3_fn);
 
-    var tpl = try env.compile("<{{ greet31(tul=23678, name='Text') }}", null);
+    var tpl = try env.parse("<{{ greet31(tul=23678, name='Text') }}", null);
     defer tpl.deinit();
 
     var diag: vin.Diagnostic = .{};
@@ -384,7 +384,7 @@ test "Env addGlobal fail 2" {
 
     try env.addGlobal("greet3", greet3_fn);
 
-    var tpl = try env.compile("<{{ greet3(tulu=23678, name='Text') }}", null);
+    var tpl = try env.parse("<{{ greet3(tulu=23678, name='Text') }}", null);
     defer tpl.deinit();
 
     var diag: vin.Diagnostic = .{};
@@ -425,7 +425,7 @@ test "Env addGlobal with io" {
 
     try env.addGlobal("greet_io", greet_io_fn);
 
-    var tpl = try env.compile("<{{ greet_io(tul=23678, name='Text') }}", null);
+    var tpl = try env.parse("<{{ greet_io(tul=23678, name='Text') }}", null);
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
@@ -454,7 +454,7 @@ test "Env addMethod" {
 
     try env.addMethod("addString", addString_fn);
 
-    var tpl = try env.compile("<>{{ str.addString(name='Text') }}", null);
+    var tpl = try env.parse("<>{{ str.addString(name='Text') }}", null);
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{
@@ -475,7 +475,7 @@ test "Env addMethod fail" {
 
     try env.addMethod("addString", addString_fn);
 
-    var tpl = try env.compile("<>{{ str.addString(nameh='Text') }}", null);
+    var tpl = try env.parse("<>{{ str.addString(nameh='Text') }}", null);
     defer tpl.deinit();
 
     var diag: vin.Diagnostic = .{};
@@ -516,7 +516,7 @@ test "Env addMethod fail 2" {
 
     try env.addMethod("addString", addString_fn2);
 
-    var tpl = try env.compile("<>{{ str.addString(name='Text') }}", null);
+    var tpl = try env.parse("<>{{ str.addString(name='Text') }}", null);
     defer tpl.deinit();
 
     var diag: vin.Diagnostic = .{};
@@ -552,7 +552,7 @@ test "Env addMethod set" {
 
     try env.addMethod("cy_set", cy_set_fn);
 
-    var tpl = try env.compile("{{ data.cy_set(name='Text') }}<>{{data}}", null);
+    var tpl = try env.parse("{{ data.cy_set(name='Text') }}<>{{data}}", null);
     defer tpl.deinit();
 
     var map: vin.value.Namespace = .{};
@@ -639,7 +639,7 @@ test "Env addTag" {
 
     try env.addTag("addstrings", tag_addstrings_fn);
 
-    var tpl = try env.compile("<>{% addstrings title %}123{% endaddstrings %}", null);
+    var tpl = try env.parse("<>{% addstrings title %}123{% endaddstrings %}", null);
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{
@@ -662,7 +662,7 @@ test "Env addTag fail" {
 
     var diag: vin.Diagnostic = .{};
 
-    const tpl = env.compile("<>{% addstrings title %}123{% endaddstring %}", &diag);
+    const tpl = env.parse("<>{% addstrings title %}123{% endaddstring %}", &diag);
 
     try testing.expectError(error.TemplateSyntaxError, tpl);
 
@@ -682,7 +682,7 @@ test "Env unknown tag" {
 
     var diag: vin.Diagnostic = .{};
 
-    const tpl = env.compile("<>{% addstring title %}123{% endaddstring %}", &diag);
+    const tpl = env.parse("<>{% addstring title %}123{% endaddstring %}", &diag);
 
     try testing.expectError(error.TemplateSyntaxError, tpl);
 
@@ -734,7 +734,7 @@ test "Env addTag fail 2" {
 
     try env.addTag("addstrings", tag_addstrings_fn2);
 
-    var tpl = try env.compile("<>{% addstrings title %}123{% endaddstrings %}", null);
+    var tpl = try env.parse("<>{% addstrings title %}123{% endaddstrings %}", null);
     defer tpl.deinit();
 
     var diag: vin.Diagnostic = .{};
@@ -908,7 +908,7 @@ test "value callable" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile("<>{{ data.vget() }},{{ data.update() }},{{ data.vget() }},{{ data.reset() }}{{ data.vget() }},{{ data.put('pikef') }}", null);
+    var tpl = try env.parse("<>{{ data.vget() }},{{ data.update() }},{{ data.vget() }},{{ data.reset() }}{{ data.vget() }},{{ data.put('pikef') }}", null);
     defer tpl.deinit();
 
     var ba: TestBA = .{
@@ -937,7 +937,7 @@ test "value callable error" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile("<>{{ data.errors() }}", null);
+    var tpl = try env.parse("<>{{ data.errors() }}", null);
     defer tpl.deinit();
 
     var ba: TestBA = .{
@@ -1022,7 +1022,7 @@ test "for loop with continue and break" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile("{% for i in [1, 2, 3, 4, 5] %}{% if i == 2 %}{% continue %}{% endif %}{% if i == 4 %}{% break %}{% endif %}{{ i }}{% endfor %}", null);
+    var tpl = try env.parse("{% for i in [1, 2, 3, 4, 5] %}{% if i == 2 %}{% continue %}{% endif %}{% if i == 4 %}{% break %}{% endif %}{{ i }}{% endfor %}", null);
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
@@ -1040,7 +1040,7 @@ test "for loop with continue and break fail" {
     defer env.deinit();
 
     {
-        var tpl = try env.compile("{% continue %}{% for i in [1, 2, 3, 4, 5] %}{% if i == 2 %}{% continue %}{% endif %}{% if i == 4 %}{% break %}{% endif %}{{ i }}{% endfor %}", null);
+        var tpl = try env.parse("{% continue %}{% for i in [1, 2, 3, 4, 5] %}{% if i == 2 %}{% continue %}{% endif %}{% if i == 4 %}{% break %}{% endif %}{{ i }}{% endfor %}", null);
         defer tpl.deinit();
 
         var diag: vin.Diagnostic = .{};
@@ -1055,7 +1055,7 @@ test "for loop with continue and break fail" {
     }
 
     {
-        var tpl = try env.compile("{% break %}{% for i in [1, 2, 3, 4, 5] %}{% if i == 2 %}{% continue %}{% endif %}{% if i == 4 %}{% break %}{% endif %}{{ i }}{% endfor %}", null);
+        var tpl = try env.parse("{% break %}{% for i in [1, 2, 3, 4, 5] %}{% if i == 2 %}{% continue %}{% endif %}{% if i == 4 %}{% break %}{% endif %}{{ i }}{% endfor %}", null);
         defer tpl.deinit();
 
         var diag: vin.Diagnostic = .{};
@@ -1159,7 +1159,7 @@ test "value caller" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile("<>{{ data('test-data') }}", null);
+    var tpl = try env.parse("<>{{ data('test-data') }}", null);
     defer tpl.deinit();
 
     var ba: TestCaller = .{};
@@ -1196,7 +1196,7 @@ test "value caller 2" {
 
     try env.addFunction("data", test_caller_fn);
 
-    var tpl = try env.compile("<>{{ data('test-data') }}|{{ data2('test-nnn') }}", null);
+    var tpl = try env.parse("<>{{ data('test-data') }}|{{ data2('test-nnn') }}", null);
     defer tpl.deinit();
 
     const val: vin.Value = .fromCaller(.{
@@ -1221,7 +1221,7 @@ test "value caller fail" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile("<>{{ data() }}", null);
+    var tpl = try env.parse("<>{{ data() }}", null);
     defer tpl.deinit();
 
     var ba: TestCaller = .{};
@@ -1283,7 +1283,7 @@ test "value callable getAttr" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile("<>{{ data.abc }},{% set data.abc = 'ddddddd' %}{{ data.abc }}", null);
+    var tpl = try env.parse("<>{{ data.abc }},{% set data.abc = 'ddddddd' %}{{ data.abc }}", null);
     defer tpl.deinit();
 
     var ba: TestBA2 = .{
@@ -1389,7 +1389,7 @@ test "value callable getItem" {
         "|{{ data[1] }},{% set data[1] = 7 %}{{ data[1] }}" ++
         "|{{ data[3.2] }},{% set data[3.2] = 9.5 %}{{ data[3.2] }}";
 
-    var tpl = try env.compile(src, null);
+    var tpl = try env.parse(src, null);
     defer tpl.deinit();
 
     var ba: TestBA3 = .{
@@ -1479,7 +1479,7 @@ test "env range fail" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile("{% for i in range() %}{{ i }}{% endfor %}|{% for i in range(2, 8, 3) %}{{ i }}{% endfor %}|{% for i in range(3, 0, -1) %}{{ i }}{% endfor %}", null);
+    var tpl = try env.parse("{% for i in range() %}{{ i }}{% endfor %}|{% for i in range(2, 8, 3) %}{{ i }}{% endfor %}|{% for i in range(3, 0, -1) %}{{ i }}{% endfor %}", null);
     defer tpl.deinit();
 
     var diag: vin.Diagnostic = .{};
@@ -1510,7 +1510,7 @@ test "env addGlobalValue" {
     try env.addGlobalValue("tests", .fromString("test-vv"));
     try env.addGlobalValue("call_val", val);
 
-    var tpl = try env.compile("<>{{ tests }}|{{ data }}|{{ call_val('opikl') }}", null);
+    var tpl = try env.parse("<>{{ tests }}|{{ data }}|{{ call_val('opikl') }}", null);
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{
@@ -1648,7 +1648,7 @@ test "macro template name" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile("{% macro foo() %}OK{% endmacro %}{{ foo.template_name }}", null);
+    var tpl = try env.parse("{% macro foo() %}OK{% endmacro %}{{ foo.template_name }}", null);
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
@@ -1730,7 +1730,7 @@ test "use delimiters options to render template" {
     });
     defer env.deinit();
 
-    var tpl = try env.compile("[% set items = ['oo', 'pp'] %]Hello << name >>|[# comment data #]|[% for item in items %]- << item >>[% endfor %]", null);
+    var tpl = try env.parse("[% set items = ['oo', 'pp'] %]Hello << name >>|[# comment data #]|[% for item in items %]- << item >>[% endfor %]", null);
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{
@@ -1747,7 +1747,7 @@ test "while loop with break and continue" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile(
+    var tpl = try env.parse(
         "{% set i = 0 %}{% while i < 5 %}{% set i = i + 1 %}{% if i == 2 %}{% continue %}{% endif %}{% if i == 4 %}{% break %}{% endif %}{{ i }}{% endwhile %}",
         null,
     );
@@ -1768,7 +1768,7 @@ test "while loop iteration limit" {
     });
     defer env.deinit();
 
-    var tpl = try env.compile("{% while true %}{% endwhile %}", null);
+    var tpl = try env.parse("{% while true %}{% endwhile %}", null);
     defer tpl.deinit();
 
     var diag: vin.Diagnostic = .{};
@@ -1886,7 +1886,7 @@ test "block() renders named block" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile(
+    var tpl = try env.parse(
         \\A
         \\{% block header %}HEADER{% endblock %}
         \\B={{ block("header") }}
@@ -1908,7 +1908,7 @@ test "block() can be called repeatedly" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile(
+    var tpl = try env.parse(
         \\{% block item %}[item]{% endblock %}
         \\{{ block("item") }}|{{ block("item") }}
     , null);
@@ -1928,7 +1928,7 @@ test "block() rejects missing arguments" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile("{{ block() }}", null);
+    var tpl = try env.parse("{{ block() }}", null);
     defer tpl.deinit();
 
     var diag: vin.Diagnostic = .{};
@@ -1950,7 +1950,7 @@ test "block() rejects non-string names" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile("{{ block(42) }}", null);
+    var tpl = try env.parse("{{ block(42) }}", null);
     defer tpl.deinit();
 
     var diag: vin.Diagnostic = .{};
@@ -1972,7 +1972,7 @@ test "block() missing block returns empty string" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile("before{{ block(\"missing\") }}after", null);
+    var tpl = try env.parse("before{{ block(\"missing\") }}after", null);
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
@@ -1989,7 +1989,7 @@ test "block() rejects recursive calls" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile(
+    var tpl = try env.parse(
         \\{% block loop %}{{ block("loop") }}{% endblock %}
     , null);
     defer tpl.deinit();
@@ -2029,7 +2029,7 @@ test "block() uses inheritance block chain" {
     var env = try vin.Environment.initWithLoader(alloc, .{}, map.loader());
     defer env.deinit();
 
-    var tpl = try env.compile(
+    var tpl = try env.parse(
         \\{% extends "base" %}
         \\{% block header %}child header{% endblock %}
     , null);
@@ -2116,7 +2116,7 @@ test "use set item to for tag" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile(
+    var tpl = try env.parse(
         \\{% for items in users|groupby('city') %}{% set items[1] = [{'name': 'emma22', 'city': 'NYC'}] %}{{ items[0] }}: {% for u in items[1] %}{{ u.name }}{% if not loop.last %}, {% endif %}{% endfor %};{% endfor %}
     , null);
     defer tpl.deinit();
@@ -2139,7 +2139,7 @@ test "use set item to for tag attr" {
     var env = try vin.Environment.init(alloc, .{});
     defer env.deinit();
 
-    var tpl = try env.compile(
+    var tpl = try env.parse(
         \\{% for items in users|groupby('city') %}{% set items.list = [{'name': 'emma22', 'city': 'NYC'}] %}{{ items.grouper }}: {% for u in items.list %}{{ u.name }}{% if not loop.last %}, {% endif %}{% endfor %};{% endfor %}
     , null);
     defer tpl.deinit();
@@ -2214,7 +2214,7 @@ test "value any set" {
     try dict.set("maps", maps.asValue());
     try dict.set("ns", ns.asValue());
 
-    var tpl = try env.compile(
+    var tpl = try env.parse(
         \\{{ arr }}|{{ arr2 }}|{{ tuple }}|{{ arr3 }}|{{ maps }}|{{ ns }}|{{ ns.arr }}|{{ ns.arr2 }}|{{ ns.arr3 }}
     , null);
     defer tpl.deinit();
