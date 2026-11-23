@@ -165,7 +165,7 @@ fn renderBombErr(
     var tmpl = env.compile(src, null) catch |e| return e;
     defer tmpl.deinit();
 
-    const out = tmpl.render(fba.allocator(), .{ .map = .{ .pairs = &.{} } }, null) catch |e| return e;
+    const out = tmpl.render(.{ .map = .{ .pairs = &.{} } }, null) catch |e| return e;
     fba.allocator().free(out);
     return error.BombRenderedSuccessfully;
 }

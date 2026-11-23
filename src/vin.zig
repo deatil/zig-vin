@@ -8,6 +8,7 @@ pub const value = @import("value.zig");
 pub const ast = @import("ast.zig");
 pub const lexer = @import("lexer.zig");
 pub const args = @import("args.zig");
+pub const diags = @import("diag.zig");
 pub const parser = @import("parser.zig");
 pub const renders = @import("render.zig");
 pub const loaders = @import("loader.zig");
@@ -48,7 +49,7 @@ pub const valueFromJson = value.fromJson;
 /// filters need exactly it.
 pub const escapeAlloc = value.escapeAlloc;
 
-pub const Diagnostic = @import("diag.zig").Diagnostic;
+pub const Diagnostic = diags.Diagnostic;
 
 /// Where `{% extends %}`, `{% include %}` and `{% import %}` find templates.
 pub const Loader = loaders.Loader;
@@ -106,6 +107,7 @@ pub const Options = struct {
 };
 
 pub const AstError = ast.Error;
+pub const ArgsError = args.Error;
 pub const CompileError = parser.Error;
 pub const RenderError = renders.Error;
 pub const Error = AstError || CompileError || RenderError;
@@ -113,7 +115,6 @@ pub const Error = AstError || CompileError || RenderError;
 pub const Ctx = args.Ctx;
 pub const Args = args.Args;
 pub const Kwarg = args.Kwarg;
-pub const ArgsError = args.Error;
 
 pub const FilterFn = args.FilterFn;
 pub const TestFn = args.TestFn;
@@ -287,6 +288,7 @@ pub const Environment = struct {
         }, .{ .max_nesting_depth = self.options.max_nesting_depth }, d);
 
         return .{
+            .gpa = self.gpa,
             .arena = arena,
             .io = self.io,
             .parsed = parsed,
@@ -312,7 +314,7 @@ pub const Environment = struct {
         var tmpl = try self.compile(source, diag);
         defer tmpl.deinit();
 
-        return tmpl.render(self.gpa, context, diag);
+        return tmpl.render(context, diag);
     }
 
     pub fn getTemplate(
@@ -352,7 +354,7 @@ pub const Environment = struct {
         var tmpl = try self.getTemplate(tpl, diag);
         defer tmpl.deinit();
 
-        return tmpl.render(self.gpa, context, diag);
+        return tmpl.render(context, diag);
     }
 
     fn hasFilterThunk(ctx: *const anyopaque, name: []const u8) bool {
@@ -452,6 +454,7 @@ pub const Environment = struct {
 /// compilation, so one template may be rendered from several threads at once
 /// (each render allocates its own scratch arena).
 pub const Template = struct {
+    gpa: Allocator,
     arena: std.heap.ArenaAllocator,
     io: Io,
     parsed: ast.Parsed,
@@ -465,31 +468,29 @@ pub const Template = struct {
     /// Render to a freshly allocated buffer owned by the caller.
     pub fn render(
         self: *const Template,
-        gpa: Allocator,
         context: Value,
         diag: ?*Diagnostic,
     ) RenderError![]u8 {
-        var aw: Writer.Allocating = .init(gpa);
+        var aw: Writer.Allocating = .init(self.gpa);
         errdefer aw.deinit();
 
-        try self.renderTo(gpa, &aw.writer, context, diag);
+        try self.renderTo(&aw.writer, context, diag);
         return aw.toOwnedSlice() catch error.OutOfMemory;
     }
 
+    /// Execute to a freshly allocated buffer owned by the caller.
     pub fn execute(
         self: *const Template,
-        gpa: Allocator,
         context: Value,
         diag: ?*Diagnostic,
     ) RenderError![]u8 {
-        return self.render(gpa, context, diag);
+        return self.render(context, diag);
     }
 
-    /// Render into `out`. `gpa` backs a scratch arena that is released before
+    /// Render into `out` backs a scratch arena that is released before
     /// this returns, so intermediate values never outlive the call.
     pub fn renderTo(
         self: *const Template,
-        gpa: Allocator,
         out: *Writer,
         context: Value,
         diag: ?*Diagnostic,
@@ -497,7 +498,7 @@ pub const Template = struct {
         var scratch: Diagnostic = .{};
         const d = diag orelse &scratch;
 
-        var arena: std.heap.ArenaAllocator = .init(gpa);
+        var arena: std.heap.ArenaAllocator = .init(self.gpa);
         defer arena.deinit();
 
         var budget: RenderBudget = .{

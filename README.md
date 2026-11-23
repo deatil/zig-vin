@@ -82,7 +82,7 @@ pub fn main(init: std.process.Init) !void {
     });
     defer env.deinit();
 
-    var diag: vin.Diagnostic = undefined;
+    var diag: vin.Diagnostic = .{};
 
     const out = try env.execute(alloc, tpl, ctx, &diag) catch {
         const err_msg = try alloc.print("{f}", .{diag});
@@ -130,7 +130,7 @@ pub fn main(init: std.process.Init) !void {
     }, dl.loader());
     defer env.deinit();
 
-    var diag: vin.Diagnostic = undefined;
+    var diag: vin.Diagnostic = .{};
 
     const tpl = "index";
     const out = try env.render(alloc, tpl, ctx, &diag) catch {

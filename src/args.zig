@@ -51,6 +51,21 @@ pub const Ctx = struct {
         if (v == .undef and self.strict) return error.UndefinedValue;
         return value.strAlloc(self.arena, v);
     }
+
+    pub fn toFloat(self: *Ctx, v: Value) Error!f64 {
+        if (v == .undef and self.strict) return error.UndefinedValue;
+        return value.asFloat(v) orelse 0.0;
+    }
+
+    pub fn toInt(self: *Ctx, v: Value) Error!i64 {
+        if (v == .undef and self.strict) return error.UndefinedValue;
+        return value.asInt(v) orelse 0;
+    }
+
+    pub fn toBool(self: *Ctx, v: Value) bool {
+        _ = self;
+        return v.truthy();
+    }
 };
 
 pub const FilterFn = *const fn (ctx: *Ctx, input: Value, args: Args) Error!Value;

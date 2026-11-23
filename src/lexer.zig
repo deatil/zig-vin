@@ -2,9 +2,11 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const mem = std.mem;
 
+const diags = @import("diag.zig");
 const errors = @import("errors.zig");
 
 pub const Error = errors.LexerError;
+pub const Diagnostic = diags.Diagnostic;
 
 pub const Delimiters = struct {
     /// Delimiters for `{{ ... }}` output tags.
@@ -109,8 +111,6 @@ const Mark = struct {
 pub const Result = struct {
     pieces: []const Piece,
 };
-
-pub const Diagnostic = @import("diag.zig").Diagnostic;
 
 pub fn lex(arena: Allocator, source: []const u8, opts: Options, diag: *Diagnostic) Error!Result {
     var l: Lexer = .{

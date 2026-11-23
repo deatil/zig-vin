@@ -97,7 +97,7 @@ test "a render-time diagnostic names the undefined variable" {
     var tmpl = try env.compile("x\n{{ missing }}", null);
     defer tmpl.deinit();
     var diag: vin.Diagnostic = .{};
-    try testing.expectError(error.UndefinedValue, tmpl.render(gpa, .{ .map = .{ .pairs = &.{} } }, &diag));
+    try testing.expectError(error.UndefinedValue, tmpl.render(.{ .map = .{ .pairs = &.{} } }, &diag));
     try testing.expect(std.mem.find(u8, diag.message(), "missing") != null);
 }
 
@@ -156,7 +156,7 @@ test "a compiled template is reusable across renders" {
     defer arena.deinit();
     for ([_]i64{ 1, 2, 3 }) |n| {
         const ctx = try vin.valueFrom(arena.allocator(), .{ .n = n });
-        const out = try tmpl.render(gpa, ctx, null);
+        const out = try tmpl.render(ctx, null);
         defer gpa.free(out);
         var buf: [8]u8 = undefined;
         try testing.expectEqualStrings(try std.fmt.bufPrint(&buf, "{d}", .{n}), out);
@@ -176,7 +176,7 @@ test "renderTo writes into a caller-owned writer" {
 
     var buf: [64]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);
-    try tmpl.renderTo(gpa, &w, ctx, null);
+    try tmpl.renderTo(&w, ctx, null);
     try testing.expectEqualStrings("hello world", w.buffered());
 }
 
@@ -278,10 +278,6 @@ test "a macro in an imported template can use a filter the CALLER registered" {
 }
 
 test "an unknown filter inside a LOADED template is still a resolution error" {
-    // Part 1 resolves filter names when the entry template compiles. A loaded
-    // template compiles when it is first reached, so the same guarantee holds
-    // — just later, and it must not degrade into a render-time surprise with no
-    // explanation.
     const gpa = testing.allocator;
     var map: vin.MapLoader = .{ .entries = &.{.{ .name = "bad", .source = "{{ x|nosuchfilter }}" }} };
     var env = try vin.Environment.initWithLoader(gpa, .{}, map.loader());
@@ -309,7 +305,7 @@ test "a Template stays immutable across renders that load other templates" {
     defer arena.deinit();
     for ([_]i64{ 1, 2 }) |n| {
         const ctx = try vin.valueFrom(arena.allocator(), .{ .n = n });
-        const out = try tmpl.render(gpa, ctx, null);
+        const out = try tmpl.render(ctx, null);
         defer gpa.free(out);
         var buf: [16]u8 = undefined;
         try testing.expectEqualStrings(try std.fmt.bufPrint(&buf, "<{d}><{d}>", .{ n, n }), out);
@@ -408,9 +404,6 @@ test "nesting deeper than the bound is a named error, not a stack overflow" {
     var env = try vin.Environment.init(gpa, .{ .undefined_policy = .lenient });
     defer env.deinit();
     for (nestings) |c| {
-        // 20 000 levels: every one of these was a SIGSEGV at this depth, in
-        // templates of 20–420 KB. The default bound is 256, so the answer must
-        // arrive as an error long before any stack is touched.
         const src = try nestedSrc(gpa, c.parts, 20_000);
         defer gpa.free(src);
         var diag: vin.Diagnostic = .{};
@@ -420,8 +413,7 @@ test "nesting deeper than the bound is a named error, not a stack overflow" {
             std.debug.print("\n{s} nested 20000 deep compiled instead of being refused\n", .{c.what});
             return error.NestingNotBounded;
         } else |e| try testing.expectEqual(error.TooDeep, e);
-        // Reported like every other template error: a typed error plus a
-        // diagnostic, not a panic and not a silent truncation.
+
         try testing.expect(std.mem.find(u8, diag.message(), "nested deeper than") != null);
     }
 }

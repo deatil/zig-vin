@@ -326,7 +326,7 @@ test "Env addGlobal" {
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("\\Alice=fn2: Blue,33", out);
 }
@@ -345,7 +345,7 @@ test "Env addGlobal 2" {
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("<fn2: Text,23678", out);
 }
@@ -363,10 +363,10 @@ test "Env addGlobal fail" {
     var tpl = try env.compile("<{{ greet31(tul=23678, name='Text') }}", null);
     defer tpl.deinit();
 
-    var diag: vin.Diagnostic = undefined;
+    var diag: vin.Diagnostic = .{};
 
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = tpl.render(alloc, ctx, &diag);
+    const out = tpl.render(ctx, &diag);
 
     try testing.expectError(error.NotCallable, out);
 
@@ -387,10 +387,10 @@ test "Env addGlobal fail 2" {
     var tpl = try env.compile("<{{ greet3(tulu=23678, name='Text') }}", null);
     defer tpl.deinit();
 
-    var diag: vin.Diagnostic = undefined;
+    var diag: vin.Diagnostic = .{};
 
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = tpl.render(alloc, ctx, &diag);
+    const out = tpl.render(ctx, &diag);
 
     try testing.expectError(error.BadArgument, out);
 
@@ -429,7 +429,7 @@ test "Env addGlobal with io" {
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("<fn2: Text,23678,17", out);
 }
@@ -460,7 +460,7 @@ test "Env addMethod" {
     const ctx = try vin.valueFrom(alloc, .{
         .str = "user",
     });
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("<>addstr: Text,user", out);
 }
@@ -478,12 +478,12 @@ test "Env addMethod fail" {
     var tpl = try env.compile("<>{{ str.addString(nameh='Text') }}", null);
     defer tpl.deinit();
 
-    var diag: vin.Diagnostic = undefined;
+    var diag: vin.Diagnostic = .{};
 
     const ctx = try vin.valueFrom(alloc, .{
         .str = "user",
     });
-    const out = tpl.render(alloc, ctx, &diag);
+    const out = tpl.render(ctx, &diag);
 
     try testing.expectError(error.BadArgument, out);
 
@@ -519,12 +519,12 @@ test "Env addMethod fail 2" {
     var tpl = try env.compile("<>{{ str.addString(name='Text') }}", null);
     defer tpl.deinit();
 
-    var diag: vin.Diagnostic = undefined;
+    var diag: vin.Diagnostic = .{};
 
     const ctx = try vin.valueFrom(alloc, .{
         .str = "user",
     });
-    const out = tpl.render(alloc, ctx, &diag);
+    const out = tpl.render(ctx, &diag);
 
     try testing.expectError(error.DiagInvalidTemplateSyntax, out);
 
@@ -563,7 +563,7 @@ test "Env addMethod set" {
     const ctx = try vin.valueFrom(alloc, .{
         .data = data,
     });
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("<>{'foo': 'Text'}", out);
 }
@@ -645,7 +645,7 @@ test "Env addTag" {
     const ctx = try vin.valueFrom(alloc, .{
         .str = "user",
     });
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("<>title123", out);
 }
@@ -660,7 +660,7 @@ test "Env addTag fail" {
 
     try env.addTag("addstrings", tag_addstrings_fn);
 
-    var diag: vin.Diagnostic = undefined;
+    var diag: vin.Diagnostic = .{};
 
     const tpl = env.compile("<>{% addstrings title %}123{% endaddstring %}", &diag);
 
@@ -717,12 +717,12 @@ test "Env addTag fail 2" {
     var tpl = try env.compile("<>{% addstrings title %}123{% endaddstrings %}", null);
     defer tpl.deinit();
 
-    var diag: vin.Diagnostic = undefined;
+    var diag: vin.Diagnostic = .{};
 
     const ctx = try vin.valueFrom(alloc, .{
         .str = "user",
     });
-    const out = tpl.render(alloc, ctx, &diag);
+    const out = tpl.render(ctx, &diag);
 
     try testing.expectError(error.TemplateSyntaxError, out);
 
@@ -904,7 +904,7 @@ test "value callable" {
     const ctx = try vin.valueFrom(alloc, .{
         .data = val,
     });
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("<>test-data,test-name1,test-name1,test-data,pikef", out);
 }
@@ -930,12 +930,12 @@ test "value callable error" {
 
     try testing.expectEqual(true, val.isCallable());
 
-    var diag: vin.Diagnostic = undefined;
+    var diag: vin.Diagnostic = .{};
 
     const ctx = try vin.valueFrom(alloc, .{
         .data = val,
     });
-    const out = tpl.render(alloc, ctx, &diag);
+    const out = tpl.render(ctx, &diag);
 
     try testing.expectError(error.InvalidMethod, out);
 
@@ -1006,7 +1006,7 @@ test "for loop with continue and break" {
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("13", out);
 }
@@ -1023,10 +1023,10 @@ test "for loop with continue and break fail" {
         var tpl = try env.compile("{% continue %}{% for i in [1, 2, 3, 4, 5] %}{% if i == 2 %}{% continue %}{% endif %}{% if i == 4 %}{% break %}{% endif %}{{ i }}{% endfor %}", null);
         defer tpl.deinit();
 
-        var diag: vin.Diagnostic = undefined;
+        var diag: vin.Diagnostic = .{};
 
         const ctx = try vin.valueFrom(alloc, .{});
-        const out = tpl.render(alloc, ctx, &diag);
+        const out = tpl.render(ctx, &diag);
 
         try testing.expectError(error.TemplateSyntaxError, out);
 
@@ -1038,10 +1038,10 @@ test "for loop with continue and break fail" {
         var tpl = try env.compile("{% break %}{% for i in [1, 2, 3, 4, 5] %}{% if i == 2 %}{% continue %}{% endif %}{% if i == 4 %}{% break %}{% endif %}{{ i }}{% endfor %}", null);
         defer tpl.deinit();
 
-        var diag: vin.Diagnostic = undefined;
+        var diag: vin.Diagnostic = .{};
 
         const ctx = try vin.valueFrom(alloc, .{});
-        const out = tpl.render(alloc, ctx, &diag);
+        const out = tpl.render(ctx, &diag);
 
         try testing.expectError(error.TemplateSyntaxError, out);
 
@@ -1153,7 +1153,7 @@ test "value caller" {
     const ctx = try vin.valueFrom(alloc, .{
         .data = val,
     });
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("<>test-data", out);
 }
@@ -1188,7 +1188,7 @@ test "value caller 2" {
     const ctx = try vin.valueFrom(alloc, .{
         .data2 = val,
     });
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("<>test-data|test-nnn", out);
 }
@@ -1212,12 +1212,12 @@ test "value caller fail" {
 
     try testing.expectEqual(true, val.isCallable());
 
-    var diag: vin.Diagnostic = undefined;
+    var diag: vin.Diagnostic = .{};
 
     const ctx = try vin.valueFrom(alloc, .{
         .data = val,
     });
-    const out = tpl.render(alloc, ctx, &diag);
+    const out = tpl.render(ctx, &diag);
 
     try testing.expectError(error.BadArgument, out);
 
@@ -1280,7 +1280,7 @@ test "value callable getAttr" {
     const ctx = try vin.valueFrom(alloc, .{
         .data = val,
     });
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("<>test-data,ddddddd", out);
 }
@@ -1389,7 +1389,7 @@ test "value callable getItem" {
     const ctx = try vin.valueFrom(alloc, .{
         .data = val,
     });
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     const expect = "<>test-data,ddddddd6" ++ 
         "|test-data2,ddddddd7" ++ 
@@ -1462,10 +1462,10 @@ test "env range fail" {
     var tpl = try env.compile("{% for i in range() %}{{ i }}{% endfor %}|{% for i in range(2, 8, 3) %}{{ i }}{% endfor %}|{% for i in range(3, 0, -1) %}{{ i }}{% endfor %}", null);
     defer tpl.deinit();
 
-    var diag: vin.Diagnostic = undefined;
+    var diag: vin.Diagnostic = .{};
 
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = tpl.render(alloc, ctx, &diag);
+    const out = tpl.render(ctx, &diag);
 
     try testing.expectError(error.BadArgument, out);
 
@@ -1496,7 +1496,7 @@ test "env addGlobalValue" {
     const ctx = try vin.valueFrom(alloc, .{
         .data = "yyy",
     });
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("<>test-vv|yyy|opikl", out);
 }
@@ -1537,7 +1537,7 @@ test "render with data" {
             .name = "test-name",
         });
 
-        var diag: vin.Diagnostic = undefined;
+        var diag: vin.Diagnostic = .{};
 
         const out = env.render("renders/tpl3", ctx, &diag);
 
@@ -1551,7 +1551,7 @@ test "render with data" {
             .name1 = "test-name",
         });
 
-        var diag: vin.Diagnostic = undefined;
+        var diag: vin.Diagnostic = .{};
 
         const out = env.render("renders/tpl31", ctx, &diag);
 
@@ -1566,7 +1566,7 @@ test "render with data" {
             .name1 = "test-name",
         });
 
-        var diag: vin.Diagnostic = undefined;
+        var diag: vin.Diagnostic = .{};
 
         const out = env.render("renders/tpl5", ctx, &diag);
 
@@ -1580,7 +1580,7 @@ test "render with data" {
             .name2 = "test-name",
         });
 
-        var diag: vin.Diagnostic = undefined;
+        var diag: vin.Diagnostic = .{};
 
         const out = env.render("renders/tpl5", ctx, &diag);
 
@@ -1595,7 +1595,7 @@ test "render with data" {
             .name1 = "test-name",
         });
 
-        var diag: vin.Diagnostic = undefined;
+        var diag: vin.Diagnostic = .{};
 
         const out = env.render("renders/tpl6", ctx, &diag);
 
@@ -1609,7 +1609,7 @@ test "render with data" {
             .name2 = "test-name",
         });
 
-        var diag: vin.Diagnostic = undefined;
+        var diag: vin.Diagnostic = .{};
 
         const out = env.render("renders/tpl6", ctx, &diag);
 
@@ -1632,7 +1632,7 @@ test "macro template name" {
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("<string>", out);
 }
@@ -1716,7 +1716,7 @@ test "use delimiters options to render template" {
     const ctx = try vin.valueFrom(alloc, .{
         .name = "test-yyy",
     });
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("Hello test-yyy||- oo- pp", out);
 }
@@ -1734,7 +1734,7 @@ test "while loop with break and continue" {
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
     defer alloc.free(out);
 
     try testing.expectEqualStrings("13", out);
@@ -1751,9 +1751,9 @@ test "while loop iteration limit" {
     var tpl = try env.compile("{% while true %}{% endwhile %}", null);
     defer tpl.deinit();
 
-    var diag: vin.Diagnostic = undefined;
+    var diag: vin.Diagnostic = .{};
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = tpl.render(alloc, ctx, &diag);
+    const out = tpl.render(ctx, &diag);
 
     try testing.expectError(error.LoopLimitExceeded, out);
 }
@@ -1875,7 +1875,7 @@ test "block() renders named block" {
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("A\nHEADER\nB=HEADER\nC", out);
 }
@@ -1895,7 +1895,7 @@ test "block() can be called repeatedly" {
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("[item]\n[item]|[item]", out);
 }
@@ -1911,9 +1911,9 @@ test "block() rejects missing arguments" {
     var tpl = try env.compile("{{ block() }}", null);
     defer tpl.deinit();
 
-    var diag: vin.Diagnostic = undefined;
+    var diag: vin.Diagnostic = .{};
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = tpl.render(alloc, ctx, &diag);
+    const out = tpl.render(ctx, &diag);
 
     try testing.expectError(error.BadArgument, out);
     try testing.expectEqualStrings(
@@ -1933,9 +1933,9 @@ test "block() rejects non-string names" {
     var tpl = try env.compile("{{ block(42) }}", null);
     defer tpl.deinit();
 
-    var diag: vin.Diagnostic = undefined;
+    var diag: vin.Diagnostic = .{};
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = tpl.render(alloc, ctx, &diag);
+    const out = tpl.render(ctx, &diag);
 
     try testing.expectError(error.TypeMismatch, out);
     try testing.expectEqualStrings(
@@ -1956,7 +1956,7 @@ test "block() missing block returns empty string" {
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("beforeafter", out);
 }
@@ -1974,9 +1974,9 @@ test "block() rejects recursive calls" {
     , null);
     defer tpl.deinit();
 
-    var diag: vin.Diagnostic = undefined;
+    var diag: vin.Diagnostic = .{};
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = tpl.render(alloc, ctx, &diag);
+    const out = tpl.render(ctx, &diag);
 
     try testing.expectError(error.BlockError, out);
     try testing.expectEqualStrings(
@@ -2016,7 +2016,7 @@ test "block() uses inheritance block chain" {
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings(
         "BASE[child header][child header]",
@@ -2102,7 +2102,7 @@ test "use set item to for tag" {
     defer tpl.deinit();
 
     const ctx = try vin.valueFromJson(alloc, jsons.value);
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("NYC: emma22;WA: emma22;", out);
 }
@@ -2125,7 +2125,7 @@ test "use set item to for tag attr" {
     defer tpl.deinit();
 
     const ctx = try vin.valueFromJson(alloc, jsons.value);
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("NYC: emma22;WA: emma22;", out);
 }
@@ -2148,7 +2148,7 @@ test "use set item to for tag attr with fromString" {
     defer tpl.deinit();
 
     const ctx = try vin.valueFromJson(alloc, jsons.value);
-    const out = try tpl.execute(alloc, ctx, null);
+    const out = try tpl.execute(ctx, null);
 
     try testing.expectEqualStrings("NYC: emma22;WA: emma22;", out);
 }
@@ -2200,7 +2200,7 @@ test "value any set" {
     defer tpl.deinit();
 
     const ctx = try dict.asValue();
-    const out = try tpl.render(alloc, ctx, null);
+    const out = try tpl.render(ctx, null);
 
     try testing.expectEqualStrings("['uu']|('uu',)|('jkl', 'qqw89', 'ytr35')|[True, 25, 3.25, 'ytr35', '<ytr35', '<ytr35>']|{'lo': 'kkk'}|{'arr': 'uuu', 'arr2': '<ytr35', 'arr3': '<ytr35>'}|uuu|<ytr35|<ytr35>", out);
 }
@@ -2235,7 +2235,7 @@ test "env getTemplate and fromFile" {
         var tpl = try env.getTemplate("child", null);
         defer tpl.deinit();
 
-        const out = try tpl.render(alloc, ctx, null);
+        const out = try tpl.render(ctx, null);
 
         try testing.expectEqualStrings("child+base", out);
     }
@@ -2243,7 +2243,7 @@ test "env getTemplate and fromFile" {
         var tpl = try env.fromFile("child", null);
         defer tpl.deinit();
 
-        const out = try tpl.execute(alloc, ctx, null);
+        const out = try tpl.execute(ctx, null);
 
         try testing.expectEqualStrings("child+base", out);
     }
@@ -2257,4 +2257,38 @@ test "env getTemplate and fromFile" {
             try alloc.print("{f}", .{diag}),
         );
     }
+}
+
+fn greet8_fn(ctx: *vin.Ctx, args: vin.Args) vin.ArgsError!vin.Value {
+    const name_val = args.get(0, "name") orelse return error.BadArgument;
+    const name1_val = args.get(1, "name1") orelse return error.BadArgument;
+    const name2_val = args.get(2, "name2") orelse return error.BadArgument;
+    const name3_val = args.get(3, "name3") orelse return error.BadArgument;
+
+    const s = ctx.toStr(name_val) catch return error.BadArgument;
+    const d1 = ctx.toInt(name1_val) catch return error.BadArgument;
+    const d2 = ctx.toFloat(name2_val) catch return error.BadArgument;
+    const d3 = ctx.toBool(name3_val);
+
+    const out = try ctx.arena.print("{s}-{d}-{}-{}", .{s, d1, d2, d3});
+    return .{ .string = .{ .bytes = out, .safe = false } };
+}
+
+test "Env addGlobal args to data" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    try env.addGlobal("greet", greet8_fn);
+
+    var tpl = try env.fromString("\\{{ greet('Alice', 12, 5.7, true) }}", null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = try tpl.render(ctx, null);
+
+    try testing.expectEqualStrings("\\Alice-12-5.7-true", out);
 }

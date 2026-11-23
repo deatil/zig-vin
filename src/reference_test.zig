@@ -107,7 +107,7 @@ pub fn renderCase(gpa: Allocator, io: Io, c: Case) !Outcome {
         return .{ .failed = msg };
     };
     defer tmpl.deinit();
-    const out = tmpl.render(gpa, ctx, &diag) catch return .{ .failed = "render error" };
+    const out = tmpl.render(ctx, &diag) catch return .{ .failed = "render error" };
     return .{ .ok = out };
 }
 
