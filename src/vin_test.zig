@@ -667,7 +667,27 @@ test "Env addTag fail" {
     try testing.expectError(error.TemplateSyntaxError, tpl);
 
     const msg = try alloc.print("{f}", .{diag});
-    try testing.expectEqualStrings("line 1: invalid tag", msg);
+    try testing.expectEqualStrings("line 1: invalid tag `addstrings`", msg);
+}
+
+test "Env unknown tag" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    try env.addTag("addstrings", tag_addstrings_fn);
+
+    var diag: vin.Diagnostic = .{};
+
+    const tpl = env.compile("<>{% addstring title %}123{% endaddstring %}", &diag);
+
+    try testing.expectError(error.TemplateSyntaxError, tpl);
+
+    const msg = try alloc.print("{f}", .{diag});
+    try testing.expectEqualStrings("line 1: unknown tag `addstring`", msg);
 }
 
 const TestH2 = struct {
@@ -1602,7 +1622,7 @@ test "render with data" {
         try testing.expectError(error.UndefinedValue, out);
 
         const msg = try a.print("{f}", .{diag});
-        try testing.expectEqualStrings("line 6: in template '<string>': 'name2' is undefined", msg);
+        try testing.expectEqualStrings("line 6: in template 'renders/tpl6': 'name2' is undefined", msg);
     }
     {
         const ctx = try vin.valueFrom(a, .{

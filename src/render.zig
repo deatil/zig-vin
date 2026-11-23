@@ -47,6 +47,8 @@ pub const Options = struct {
     max_templates: usize = 256,
     /// Maximum number of iterations for one `{% while %}` tag.
     max_while_iterations: usize = 1_000_000,
+    /// Set a template name
+    template_name: []const u8 = "<string>",
 };
 
 /// How the renderer reaches the environment's filter/test registries without
@@ -141,7 +143,7 @@ pub fn render(
     };
 
     const entry = try arena.create(Unit);
-    entry.* = .{ .name = "<string>", .parsed = parsed };
+    entry.* = .{ .name = opts.template_name, .parsed = parsed };
     try r.pushFrame();
     try r.renderUnit(entry);
 }

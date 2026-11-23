@@ -98,6 +98,11 @@ pub const Parser = struct {
     /// The first top-level `{% extends %}`.
     extends: ?*const Expr = null,
 
+    pub fn fail(self: *Parser, line: usize, comptime fmt: []const u8, args: anytype) Error {
+        self.diag.set(line, fmt, args);
+        return error.TemplateSyntaxError;
+    }
+
     pub fn failAt(self: *Parser, line: usize, msg: []const u8) Error {
         self.diag.set(line, "{s}", .{msg});
         return error.TemplateSyntaxError;
@@ -186,7 +191,7 @@ pub const Parser = struct {
 
         if (self.registry.tag(self.registry.ctx, kw.text)) |fn_ptr| {
             return fn_ptr(self, rest, line, out) catch {
-                return self.failAt(line, "invalid tag");
+                return self.fail(line, "invalid tag `{s}`", .{kw.text});
             };
         }
 
@@ -218,7 +223,7 @@ pub const Parser = struct {
             return;
         }
 
-        return self.failAt(line, "unknown tag");
+        return self.fail(line, "unknown tag `{s}`", .{kw.text});
     }
 
     pub fn parseIf(self: *Parser, rest: []const Token, line: usize, out: *std.ArrayList(Node)) Error!void {

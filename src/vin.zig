@@ -330,7 +330,12 @@ pub const Environment = struct {
                 d.set(0, "Template '{s}' load fail", .{tpl});
                 return err;
             };
-            if (source) |val| return self.compile(val, d);
+
+            if (source) |val| {
+                var tmpl = try self.compile(val, d);
+                tmpl.template_name = tpl;
+                return tmpl;
+            }
         }
 
         d.set(0, "Template '{s}' not found", .{tpl});
@@ -459,6 +464,7 @@ pub const Template = struct {
     io: Io,
     parsed: ast.Parsed,
     env: *const Environment,
+    template_name: []const u8 = "<string>",
 
     pub fn deinit(self: *Template) void {
         self.arena.deinit();
@@ -514,6 +520,7 @@ pub const Template = struct {
             .max_call_depth = self.env.options.max_call_depth,
             .max_templates = self.env.options.max_templates,
             .max_while_iterations = self.env.options.max_while_iterations,
+            .template_name = self.template_name,
         }, .{
             .ctx = self.env,
             .filter = Environment.filterLookup,
