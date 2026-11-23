@@ -299,7 +299,7 @@ var tmpl = env.compile(src, &diag) catch {
     std.debug.print("template error: {f}\n", .{&diag});   // "line 12: unknown filter — …"
     return;
 };
-const out = tmpl.render(gpa, ctx, &diag) catch {
+const out = tmpl.render(ctx, &diag) catch {
     std.debug.print("render error: {f}\n", .{&diag});     // "line 4: 'address' is undefined"
     return;
 };

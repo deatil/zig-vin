@@ -84,7 +84,7 @@ pub fn main(init: std.process.Init) !void {
 
     var diag: vin.Diagnostic = .{};
 
-    const out = try env.execute(alloc, tpl, ctx, &diag) catch {
+    const out = try env.execute(tpl, ctx, &diag) catch {
         const err_msg = try alloc.print("{f}", .{diag});
         std.debug.print("error: {s} \n", .{err_msg});
         return;
@@ -133,7 +133,7 @@ pub fn main(init: std.process.Init) !void {
     var diag: vin.Diagnostic = .{};
 
     const tpl = "index";
-    const out = try env.render(alloc, tpl, ctx, &diag) catch {
+    const out = try env.render(tpl, ctx, &diag) catch {
         const err_msg = try alloc.print("{f}", .{diag});
         std.debug.print("error: {s} \n", .{err_msg});
         return;
