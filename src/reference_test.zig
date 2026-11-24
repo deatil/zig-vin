@@ -102,12 +102,14 @@ pub fn renderCase(gpa: Allocator, io: Io, c: Case) !Outcome {
     defer env.deinit();
 
     var diag: vin.Diagnostic = .{};
-    var tmpl = env.parse(c.template, &diag) catch {
+    env.withDiag(&diag);
+
+    var tmpl = env.parse(c.template) catch {
         const msg = try gpa.print("compile error: {f}", .{diag});
         return .{ .failed = msg };
     };
     defer tmpl.deinit();
-    const out = tmpl.render(ctx, &diag) catch return .{ .failed = "render error" };
+    const out = tmpl.render(ctx) catch return .{ .failed = "render error" };
     return .{ .ok = out };
 }
 

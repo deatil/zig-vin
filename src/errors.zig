@@ -77,3 +77,7 @@ pub const LoaderError = error{
     /// the loader refuses. Distinct from "not found", which is `null`.
     LoaderFailed,
 };
+
+pub const VinError = error{
+    OutOfMemory,
+};

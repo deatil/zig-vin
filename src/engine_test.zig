@@ -7,7 +7,7 @@ const vin = @import("vin.zig");
 fn renderWith(gpa: Allocator, opts: vin.Options, src: []const u8, ctx: vin.Value) ![]u8 {
     var env = try vin.Environment.init(gpa, opts);
     defer env.deinit();
-    return env.execute(src, ctx, null);
+    return env.execute(src, ctx);
 }
 
 test "valueFrom maps a Zig struct in field order" {
@@ -40,7 +40,8 @@ test "an unknown filter is a COMPILE error, never a render-time surprise" {
     var env = try vin.Environment.init(gpa, .{});
     defer env.deinit();
     var diag: vin.Diagnostic = .{};
-    try testing.expectError(error.TemplateSyntaxError, env.parse("{{ x|nosuchfilter }}", &diag));
+    env.withDiag(&diag);
+    try testing.expectError(error.TemplateSyntaxError, env.parse("{{ x|nosuchfilter }}"));
     try testing.expect(std.mem.find(u8, diag.message(), "unknown filter") != null);
 }
 
@@ -48,7 +49,7 @@ test "an unknown test is a compile error too" {
     const gpa = testing.allocator;
     var env = try vin.Environment.init(gpa, .{});
     defer env.deinit();
-    try testing.expectError(error.TemplateSyntaxError, env.parse("{% if x is nosuchtest %}{% endif %}", null));
+    try testing.expectError(error.TemplateSyntaxError, env.parse("{% if x is nosuchtest %}{% endif %}"));
 }
 
 test "the tags that remain unimplemented are named as such, not as typos" {
@@ -60,7 +61,9 @@ test "the tags that remain unimplemented are named as such, not as typos" {
         "{% autoescape true %}{% endautoescape %}",
     }) |src| {
         var diag: vin.Diagnostic = .{};
-        try testing.expectError(error.TemplateSyntaxError, env.parse(src, &diag));
+        env.withDiag(&diag);
+
+        try testing.expectError(error.TemplateSyntaxError, env.parse(src));
         try testing.expect(std.mem.find(u8, diag.message(), "unknown tag") != null);
     }
 }
@@ -75,7 +78,8 @@ test "a composition tag without a loader is a named error, not a silent nothing"
         "{% extends 'x' %}{% block b %}{% endblock %}",
     }) |src| {
         var diag: vin.Diagnostic = .{};
-        const r = env.execute(src, .{ .map = .{ .pairs = &.{} } }, &diag);
+        env.withDiag(&diag);
+        const r = env.execute(src, .{ .map = .{ .pairs = &.{} } });
         try testing.expectError(error.NoLoader, r);
         try testing.expect(std.mem.find(u8, diag.message(), "no loader") != null);
     }
@@ -86,7 +90,8 @@ test "diagnostics carry the line the problem is on" {
     var env = try vin.Environment.init(gpa, .{});
     defer env.deinit();
     var diag: vin.Diagnostic = .{};
-    try testing.expectError(error.TemplateSyntaxError, env.parse("a\nb\n{% wat %}\n", &diag));
+    env.withDiag(&diag);
+    try testing.expectError(error.TemplateSyntaxError, env.parse("a\nb\n{% wat %}\n"));
     try testing.expectEqual(@as(usize, 3), diag.line);
 }
 
@@ -94,10 +99,14 @@ test "a render-time diagnostic names the undefined variable" {
     const gpa = testing.allocator;
     var env = try vin.Environment.init(gpa, .{});
     defer env.deinit();
-    var tmpl = try env.parse("x\n{{ missing }}", null);
-    defer tmpl.deinit();
+
     var diag: vin.Diagnostic = .{};
-    try testing.expectError(error.UndefinedValue, tmpl.render(.{ .map = .{ .pairs = &.{} } }, &diag));
+    env.withDiag(&diag);
+
+    var tmpl = try env.parse("x\n{{ missing }}");
+    defer tmpl.deinit();
+
+    try testing.expectError(error.UndefinedValue, tmpl.render(.{ .map = .{ .pairs = &.{} } }));
     try testing.expect(std.mem.find(u8, diag.message(), "missing") != null);
 }
 
@@ -107,7 +116,7 @@ test "strict is the default undefined policy" {
     defer env.deinit();
     try testing.expectError(
         error.UndefinedValue,
-        env.execute("{{ nope }}", .{ .map = .{ .pairs = &.{} } }, null),
+        env.execute("{{ nope }}", .{ .map = .{ .pairs = &.{} } }),
     );
 }
 
@@ -140,7 +149,7 @@ test "a caller can register its own filter and test" {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
     const ctx = try vin.valueFrom(arena.allocator(), .{ .bits = 24, .addr = "10.1.2.3" });
-    const out = try env.execute("{{ bits|netmask }} {{ addr is private }}", ctx, null);
+    const out = try env.execute("{{ bits|netmask }} {{ addr is private }}", ctx);
     defer gpa.free(out);
     try testing.expectEqualStrings("255.255.255.0 True", out);
 }
@@ -149,14 +158,14 @@ test "a compiled template is reusable across renders" {
     const gpa = testing.allocator;
     var env = try vin.Environment.init(gpa, .{});
     defer env.deinit();
-    var tmpl = try env.parse("{{ n }}", null);
+    var tmpl = try env.parse("{{ n }}");
     defer tmpl.deinit();
 
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
     for ([_]i64{ 1, 2, 3 }) |n| {
         const ctx = try vin.valueFrom(arena.allocator(), .{ .n = n });
-        const out = try tmpl.render(ctx, null);
+        const out = try tmpl.render(ctx);
         defer gpa.free(out);
         var buf: [8]u8 = undefined;
         try testing.expectEqualStrings(try std.fmt.bufPrint(&buf, "{d}", .{n}), out);
@@ -167,7 +176,7 @@ test "renderTo writes into a caller-owned writer" {
     const gpa = testing.allocator;
     var env = try vin.Environment.init(gpa, .{});
     defer env.deinit();
-    var tmpl = try env.parse("hello {{ who }}", null);
+    var tmpl = try env.parse("hello {{ who }}");
     defer tmpl.deinit();
 
     var arena: std.heap.ArenaAllocator = .init(gpa);
@@ -176,7 +185,7 @@ test "renderTo writes into a caller-owned writer" {
 
     var buf: [64]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);
-    try tmpl.renderTo(&w, ctx, null);
+    try tmpl.renderTo(&w, ctx);
     try testing.expectEqualStrings("hello world", w.buffered());
 }
 
@@ -186,7 +195,7 @@ test "a runaway render hits the output ceiling instead of the machine" {
     defer env.deinit();
     try testing.expectError(
         error.OutputTooLarge,
-        env.execute("{% for i in range(100000) %}xxxxxxxxxx{% endfor %}", .{ .map = .{ .pairs = &.{} } }, null),
+        env.execute("{% for i in range(100000) %}xxxxxxxxxx{% endfor %}", .{ .map = .{ .pairs = &.{} } }),
     );
 }
 
@@ -196,7 +205,7 @@ test "range() refuses an absurd request rather than allocating it" {
     defer env.deinit();
     try testing.expectError(
         error.OutOfRange,
-        env.execute("{{ range(100000000)|length }}", .{ .map = .{ .pairs = &.{} } }, null),
+        env.execute("{{ range(100000000)|length }}", .{ .map = .{ .pairs = &.{} } }),
     );
 }
 
@@ -236,7 +245,7 @@ test "an unterminated tag is rejected rather than swallowing the rest" {
         "{% raw %}no end",
         "{{ 'unterminated }}",
     }) |src| {
-        try testing.expectError(error.TemplateSyntaxError, env.parse(src, null));
+        try testing.expectError(error.TemplateSyntaxError, env.parse(src));
     }
 }
 
@@ -271,7 +280,6 @@ test "a macro in an imported template can use a filter the CALLER registered" {
     const out = try env.execute(
         "{% import 'macros' as m %}{{ m.cidr('10.0.0.0', '255.255.255.0') }}",
         .{ .map = .{ .pairs = &.{} } },
-        null,
     );
     defer gpa.free(out);
     try testing.expectEqualStrings("10.0.0.0/24", out);
@@ -284,9 +292,10 @@ test "an unknown filter inside a LOADED template is still a resolution error" {
     defer env.deinit();
 
     var diag: vin.Diagnostic = .{};
+    env.withDiag(&diag);
     try testing.expectError(
         error.TemplateSyntaxError,
-        env.execute("{% include 'bad' %}", .{ .map = .{ .pairs = &.{} } }, &diag),
+        env.execute("{% include 'bad' %}", .{ .map = .{ .pairs = &.{} } }),
     );
     try testing.expect(std.mem.find(u8, diag.message(), "bad") != null);
     try testing.expect(std.mem.find(u8, diag.message(), "unknown filter") != null);
@@ -298,14 +307,14 @@ test "a Template stays immutable across renders that load other templates" {
     var env = try vin.Environment.initWithLoader(gpa, .{}, map.loader());
     defer env.deinit();
 
-    var tmpl = try env.parse("{% include 'row' %}{% include 'row' %}", null);
+    var tmpl = try env.parse("{% include 'row' %}{% include 'row' %}");
     defer tmpl.deinit();
 
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
     for ([_]i64{ 1, 2 }) |n| {
         const ctx = try vin.valueFrom(arena.allocator(), .{ .n = n });
-        const out = try tmpl.render(ctx, null);
+        const out = try tmpl.render(ctx);
         defer gpa.free(out);
         var buf: [16]u8 = undefined;
         try testing.expectEqualStrings(try std.fmt.bufPrint(&buf, "<{d}><{d}>", .{ n, n }), out);
@@ -407,7 +416,8 @@ test "nesting deeper than the bound is a named error, not a stack overflow" {
         const src = try nestedSrc(gpa, c.parts, 20_000);
         defer gpa.free(src);
         var diag: vin.Diagnostic = .{};
-        if (env.parse(src, &diag)) |tmpl| {
+        env.withDiag(&diag);
+        if (env.parse(src)) |tmpl| {
             var m = tmpl;
             m.deinit();
             std.debug.print("\n{s} nested 20000 deep compiled instead of being refused\n", .{c.what});
@@ -426,7 +436,7 @@ test "the nesting bound bites AT the bound, not somewhere past it" {
         // Exactly at the limit: compiles.
         const ok_src = try nestedSrc(gpa, c.parts, c.fits_at_32);
         defer gpa.free(ok_src);
-        var ok = env.parse(ok_src, null) catch |e| {
+        var ok = env.parse(ok_src) catch |e| {
             std.debug.print("\n{s} at n={d} was refused ({s}); the bound is off by one\n", .{ c.what, c.fits_at_32, @errorName(e) });
             return error.BoundTooTight;
         };
@@ -436,7 +446,7 @@ test "the nesting bound bites AT the bound, not somewhere past it" {
         // ten times the cap proves only that something eventually stops.
         const bad_src = try nestedSrc(gpa, c.parts, c.fits_at_32 + 1);
         defer gpa.free(bad_src);
-        if (env.parse(bad_src, null)) |tmpl| {
+        if (env.parse(bad_src)) |tmpl| {
             var m = tmpl;
             m.deinit();
             std.debug.print("\n{s} at n={d} compiled; the bound is off by one\n", .{ c.what, c.fits_at_32 + 1 });

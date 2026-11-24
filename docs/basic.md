@@ -187,7 +187,7 @@ an error means "the loader refused or failed". Two are shipped:
 var dl: vin.DirLoader = .{
     .io = io,
     .root = try std.Io.Dir.cwd().openDir(io, "templates", .{}),
-    .options = .{ .suffix = ".j2", .max_bytes = 1 << 20 },
+    .options = .{ .suffix = ".htm", .max_bytes = 1 << 20 },
 };
 var env = try vin.Environment.initWithLoader(gpa, .{}, dl.loader());
 ```
@@ -246,15 +246,15 @@ there.
 ### Registering your own
 
 ```zig
-try env.addFilter("netmask", struct {
-    fn f(ctx: *vin.Ctx, input: vin.Value, args: vin.Args) vin.ArgsError!vin.Value {
-        _ = args;
-        const bits = switch (input) { .integer => |i| i, else => return error.TypeMismatch };
-        // ctx.arena is the render arena; ctx.toStr(v) honours the undefined policy.
-        const s = try std.fmt.allocPrint(ctx.arena, "/{d}", .{bits});
-        return vin.Value.fromString(s);
-    }
-}.f);
+fn fNetmask(ctx: *vin.Ctx, input: vin.Value, args: vin.Args) vin.ArgsError!vin.Value {
+    _ = args;
+    const bits = switch (input) { .integer => |i| i, else => return error.TypeMismatch };
+    // ctx.arena is the render arena; ctx.toStr(v) honours the undefined policy.
+    const s = try ctx.arena.print("/{d}", .{bits});
+    return .fromString(s);
+}
+
+try env.addFilter("netmask", fNetmask);
 ```
 
 `env.addTest` takes the same shape returning `bool`. Register before compiling —
@@ -295,11 +295,13 @@ have `items` `keys` `values` `get`; lists have `count` `index`; `loop` has
 
 ```zig
 var diag: vin.Diagnostic = .{};
-var tmpl = env.parse(src, &diag) catch {
+env.withDiag(&diag);
+
+var tmpl = env.parse(src) catch {
     std.debug.print("template error: {f}\n", .{&diag});   // "line 12: unknown filter — …"
     return;
 };
-const out = tmpl.render(ctx, &diag) catch {
+const out = tmpl.render(ctx) catch {
     std.debug.print("render error: {f}\n", .{&diag});     // "line 4: 'address' is undefined"
     return;
 };

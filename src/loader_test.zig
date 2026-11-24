@@ -113,16 +113,18 @@ test "a template cannot escape the root through a name taken from the context" {
     // merely absent: `{% include theme ignore missing %}` must not swallow an
     // escape attempt as if the file simply were not there.
     var diag: vin.Diagnostic = .{};
+    env.withDiag(&diag);
     try testing.expectError(
         error.LoaderFailed,
-        env.execute("{% include theme %}", ctx, &diag),
+        env.execute("{% include theme %}", ctx),
     );
     try testing.expect(std.mem.find(u8, diag.message(), "refused") != null);
 
     var diag2: vin.Diagnostic = .{};
+    env.withDiag(&diag2);
     try testing.expectError(
         error.LoaderFailed,
-        env.execute("{% include theme ignore missing %}", ctx, &diag2),
+        env.execute("{% include theme ignore missing %}", ctx),
     );
 }
 
@@ -162,10 +164,10 @@ fn renderBombErr(
     var env = vin.Environment.initWithLoader(gpa, .{ .undefined_policy = .lenient }, map.loader()) catch |e| return e;
     defer env.deinit();
 
-    var tmpl = env.parse(src, null) catch |e| return e;
+    var tmpl = env.parse(src) catch |e| return e;
     defer tmpl.deinit();
 
-    const out = tmpl.render(.{ .map = .{ .pairs = &.{} } }, null) catch |e| return e;
+    const out = tmpl.render(.{ .map = .{ .pairs = &.{} } }) catch |e| return e;
     fba.allocator().free(out);
     return error.BombRenderedSuccessfully;
 }
@@ -293,9 +295,10 @@ test "the caps are configurable and the error names the limit" {
     defer env.deinit();
 
     var diag: vin.Diagnostic = .{};
+    env.withDiag(&diag);
     try testing.expectError(
         error.TooDeep,
-        env.execute("{% include 'a' %}", .{ .map = .{ .pairs = &.{} } }, &diag),
+        env.execute("{% include 'a' %}", .{ .map = .{ .pairs = &.{} } }),
     );
     try testing.expect(std.mem.find(u8, diag.message(), "4") != null);
 }
@@ -310,7 +313,7 @@ test "a legitimate deep chain still renders — the cap is not just 'no nesting'
     } };
     var env = try vin.Environment.initWithLoader(gpa, .{}, map.loader());
     defer env.deinit();
-    const out = try env.execute("[{% include 'l1' %}]", .{ .map = .{ .pairs = &.{} } }, null);
+    const out = try env.execute("[{% include 'l1' %}]", .{ .map = .{ .pairs = &.{} } });
     defer gpa.free(out);
     try testing.expectEqualStrings("[1234]", out);
 }
@@ -323,7 +326,6 @@ test "a template included in a loop is loaded and compiled once" {
     const out = try env.execute(
         "{% for i in range(5) %}{% include 'row' %}{% endfor %}",
         .{ .map = .{ .pairs = &.{} } },
-        null,
     );
     defer gpa.free(out);
     try testing.expectEqualStrings("<0><1><2><3><4>", out);

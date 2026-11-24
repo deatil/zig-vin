@@ -8,6 +8,7 @@ pub const value = @import("value.zig");
 pub const ast = @import("ast.zig");
 pub const lexer = @import("lexer.zig");
 pub const args = @import("args.zig");
+pub const errors = @import("errors.zig");
 pub const diags = @import("diag.zig");
 pub const parser = @import("parser.zig");
 pub const renders = @import("render.zig");
@@ -142,21 +143,18 @@ pub const Environment = struct {
     template_caches: std.StringHashMapUnmanaged(Template) = .empty,
     /// Optional; without one, any composition tag is `error.NoLoader`.
     loader: ?Loader = null,
+    diag: ?*Diagnostic = null,
 
     const Self = @This();
 
-    pub fn init(gpa: Allocator, options: Options) error{OutOfMemory}!Self {
+    pub fn init(gpa: Allocator, options: Options) errors.VinError!Self {
         return initWithLoader(gpa, options, null);
     }
 
     /// As `init`, with the loader that `{% extends %}`, `{% include %}` and
     /// `{% import %}` will use. The loader is borrowed and must outlive the
     /// environment.
-    pub fn initWithLoader(
-        gpa: Allocator,
-        options: Options,
-        template_loader: ?Loader,
-    ) error{OutOfMemory}!Self {
+    pub fn initWithLoader(gpa: Allocator, options: Options, template_loader: ?Loader) errors.VinError!Self {
         var env: Self = .{ .gpa = gpa, .options = options, .loader = template_loader };
         errdefer env.deinit();
 
@@ -189,6 +187,15 @@ pub const Environment = struct {
         self.* = undefined;
     }
 
+    pub fn getError(self: Self) ![]const u8 {
+        if (self.diag) |d| {
+            const err = try self.gpa.print("{f}", .{d});
+            return err;
+        }
+
+        return "";
+    }
+
     pub fn withLoader(self: *Self, template_loader: Loader) void {
         self.loader = template_loader;
     }
@@ -198,35 +205,39 @@ pub const Environment = struct {
         self.io = io;
     }
 
+    pub fn withDiag(self: *Self, diag: *Diagnostic) void {
+        self.diag = diag;
+    }
+
     /// Register (or replace) a filter. `name` is borrowed and must outlive the
     /// environment.
-    pub fn addFilter(self: *Self, name: []const u8, func: FilterFn) error{OutOfMemory}!void {
+    pub fn addFilter(self: *Self, name: []const u8, func: FilterFn) errors.VinError!void {
         try self.filters.put(self.gpa, name, func);
     }
 
-    pub fn addTest(self: *Self, name: []const u8, func: TestFn) error{OutOfMemory}!void {
+    pub fn addTest(self: *Self, name: []const u8, func: TestFn) errors.VinError!void {
         try self.tests.put(self.gpa, name, func);
     }
 
     /// Register (or replace) a global function. `name` is borrowed and must
     /// outlive the environment.
-    pub fn addGlobal(self: *Self, name: []const u8, func: GlobalFn) error{OutOfMemory}!void {
+    pub fn addGlobal(self: *Self, name: []const u8, func: GlobalFn) errors.VinError!void {
         try self.globals.put(self.gpa, name, func);
     }
 
-    pub fn addGlobalValue(self: *Self, name: []const u8, val: Value) error{OutOfMemory}!void {
+    pub fn addGlobalValue(self: *Self, name: []const u8, val: Value) errors.VinError!void {
         try self.global_values.put(self.gpa, name, val);
     }
 
-    pub fn addMethod(self: *Self, name: []const u8, func: MethodFn) error{OutOfMemory}!void {
+    pub fn addMethod(self: *Self, name: []const u8, func: MethodFn) errors.VinError!void {
         try self.methods.put(self.gpa, name, func);
     }
 
-    pub fn addTag(self: *Self, name: []const u8, func: TagFn) error{OutOfMemory}!void {
+    pub fn addTag(self: *Self, name: []const u8, func: TagFn) errors.VinError!void {
         try self.tags.put(self.gpa, name, func);
     }
 
-    pub fn addFunction(self: *Self, name: []const u8, func: FunctionFn) error{OutOfMemory}!void {
+    pub fn addFunction(self: *Self, name: []const u8, func: FunctionFn) errors.VinError!void {
         try self.addGlobalValue(name, .{ .caller = .{ .call = func } });
     }
 
@@ -257,13 +268,9 @@ pub const Environment = struct {
     /// Parse `source` into a reusable `Template`. The template copies the
     /// source, so `source` need not outlive the call. `diag` (optional) is
     /// filled in on `error.TemplateSyntaxError`.
-    pub fn parse(
-        self: *const Self,
-        source: []const u8,
-        diag: ?*Diagnostic,
-    ) CompileError!Template {
+    pub fn parse(self: *Self, source: []const u8) CompileError!Template {
         var scratch: Diagnostic = .{};
-        const d = diag orelse &scratch;
+        const d = self.diag orelse &scratch;
 
         var arena: std.heap.ArenaAllocator = .init(self.gpa);
         errdefer arena.deinit();
@@ -295,45 +302,29 @@ pub const Environment = struct {
             .io = self.io,
             .parsed = parsed,
             .env = self,
+            .diag = d,
         };
     }
 
-    pub fn compile(
-        self: *const Self,
-        source: []const u8,
-        diag: ?*Diagnostic,
-    ) CompileError!Template {
-        return self.parse(source, diag);
+    pub fn compile(self: *Self, source: []const u8) CompileError!Template {
+        return self.parse(source);
     }
 
-    pub fn fromString(
-        self: *const Self,
-        source: []const u8,
-        diag: ?*Diagnostic,
-    ) CompileError!Template {
-        return self.parse(source, diag);
+    pub fn fromString(self: *Self, source: []const u8) CompileError!Template {
+        return self.parse(source);
     }
 
     /// Compile and render in one step, for the one-shot case.
-    pub fn execute(
-        self: *const Self,
-        source: []const u8,
-        context: Value,
-        diag: ?*Diagnostic,
-    ) Error![]u8 {
-        var tmpl = try self.parse(source, diag);
+    pub fn execute(self: *Self, source: []const u8, context: Value) Error![]u8 {
+        var tmpl = try self.parse(source);
         defer tmpl.deinit();
 
-        return tmpl.render(context, diag);
+        return tmpl.render(context);
     }
 
-    pub fn getTemplate(
-        self: *const Self,
-        tpl: []const u8,
-        diag: ?*Diagnostic,
-    ) !Template {
+    pub fn getTemplate(self: *Self, tpl: []const u8) !Template {
         var scratch: Diagnostic = .{};
-        var d = diag orelse &scratch;
+        var d = self.diag orelse &scratch;
 
         if (self.loader) |loader| {
             const source = loader.load(loader.ctx, self.gpa, tpl) catch |err| {
@@ -342,7 +333,7 @@ pub const Environment = struct {
             };
 
             if (source) |val| {
-                var tmpl = try self.parse(val, d);
+                var tmpl = try self.parse(val);
                 tmpl.template_name = tpl;
                 return tmpl;
             }
@@ -352,24 +343,16 @@ pub const Environment = struct {
         return error.LoaderInvalid;
     }
 
-    pub fn fromFile(
-        self: *const Self,
-        filename: []const u8,
-        diag: ?*Diagnostic,
-    ) !Template {
-        return self.getTemplate(filename, diag);
+    pub fn fromFile(self: *Self, filename: []const u8) !Template {
+        return self.getTemplate(filename);
     }
 
-    pub fn fromCache(
-        self: *Self,
-        filename: []const u8,
-        diag: ?*Diagnostic,
-    ) !Template {
+    pub fn fromCache(self: *Self, filename: []const u8) !Template {
         if (self.template_caches.get(filename)) |t| {
             return t;
         }
 
-        const t = try self.getTemplate(filename, diag);
+        const t = try self.getTemplate(filename);
         try self.template_caches.put(self.gpa, filename, t);
 
         return t;
@@ -379,16 +362,11 @@ pub const Environment = struct {
         self.template_caches.clearAndFree(self.gpa);
     }
 
-    pub fn render(
-        self: *const Self,
-        tpl: []const u8,
-        context: Value,
-        diag: ?*Diagnostic,
-    ) ![]u8 {
-        var tmpl = try self.getTemplate(tpl, diag);
+    pub fn render(self: *Self, filename: []const u8, context: Value) ![]u8 {
+        var tmpl = try self.getTemplate(filename);
         defer tmpl.deinit();
 
-        return tmpl.render(context, diag);
+        return tmpl.render(context);
     }
 
     fn hasFilterThunk(ctx: *const anyopaque, name: []const u8) bool {
@@ -494,44 +472,45 @@ pub const Template = struct {
     parsed: ast.Parsed,
     env: *const Environment,
     template_name: []const u8 = "<string>",
+    diag: ?*Diagnostic = null,
 
     pub fn deinit(self: *Template) void {
         self.arena.deinit();
         self.* = undefined;
     }
 
+    pub fn withDiag(self: *Template, diag: *Diagnostic) void {
+        self.diag = diag;
+    }
+
+    pub fn getError(self: Template) ![]const u8 {
+        if (self.diag) |d| {
+            const err = try self.gpa.print("{f}", .{d});
+            return err;
+        }
+
+        return "";
+    }
+
     /// Render to a freshly allocated buffer owned by the caller.
-    pub fn render(
-        self: *const Template,
-        context: Value,
-        diag: ?*Diagnostic,
-    ) RenderError![]u8 {
+    pub fn render(self: *Template, context: Value) RenderError![]u8 {
         var aw: Writer.Allocating = .init(self.gpa);
         errdefer aw.deinit();
 
-        try self.renderTo(&aw.writer, context, diag);
+        try self.renderTo(&aw.writer, context);
         return aw.toOwnedSlice() catch error.OutOfMemory;
     }
 
     /// Execute to a freshly allocated buffer owned by the caller.
-    pub fn execute(
-        self: *const Template,
-        context: Value,
-        diag: ?*Diagnostic,
-    ) RenderError![]u8 {
-        return self.render(context, diag);
+    pub fn execute(self: *Template, context: Value) RenderError![]u8 {
+        return self.render(context);
     }
 
     /// Render into `out` backs a scratch arena that is released before
     /// this returns, so intermediate values never outlive the call.
-    pub fn renderTo(
-        self: *const Template,
-        out: *Writer,
-        context: Value,
-        diag: ?*Diagnostic,
-    ) RenderError!void {
+    pub fn renderTo(self: *Template, out: *Writer, context: Value) RenderError!void {
         var scratch: Diagnostic = .{};
-        const d = diag orelse &scratch;
+        const d = self.diag orelse &scratch;
 
         var arena: std.heap.ArenaAllocator = .init(self.gpa);
         defer arena.deinit();
@@ -640,8 +619,9 @@ pub fn render(
     defer env.deinit();
 
     if (opts.io) |io| env.withIo(io);
+    if (opts.diag) |d| env.withDiag(d);
 
-    return env.execute(source, context, opts.diag);
+    return env.execute(source, context);
 }
 
 test {
