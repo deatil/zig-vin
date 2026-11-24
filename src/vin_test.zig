@@ -2248,6 +2248,7 @@ test "env getTemplate and fromFile" {
 
     var env = try vin.Environment.initWithLoader(alloc, .{}, map.loader());
     defer env.deinit();
+    env.withIo(testing.io);
 
     const ctx = try vin.valueFrom(alloc, .{});
 
@@ -2277,6 +2278,31 @@ test "env getTemplate and fromFile" {
             try alloc.print("{f}", .{diag}),
         );
     }
+    {
+        var tpl = try env.fromCache("child", null);
+        defer tpl.deinit();
+
+        const out = try tpl.execute(ctx, null);
+
+        try testing.expectEqualStrings("child+base", out);
+    }
+    {
+        var tpl = try env.fromCache("child", null);
+        defer tpl.deinit();
+
+        const out = try tpl.execute(ctx, null);
+
+        try testing.expectEqualStrings("child+base", out);
+    }
+    {
+        env.cleanCache();
+        var tpl = try env.fromCache("child", null);
+        defer tpl.deinit();
+
+        const out = try tpl.execute(ctx, null);
+
+        try testing.expectEqualStrings("child+base", out);
+    }
 }
 
 fn greet8_fn(ctx: *vin.Ctx, args: vin.Args) vin.ArgsError!vin.Value {
@@ -2305,6 +2331,25 @@ test "Env addGlobal args to data" {
     try env.addGlobal("greet", greet8_fn);
 
     var tpl = try env.fromString("\\{{ greet('Alice', 12, 5.7, true) }}", null);
+    defer tpl.deinit();
+
+    const ctx = try vin.valueFrom(alloc, .{});
+    const out = try tpl.render(ctx, null);
+
+    try testing.expectEqualStrings("\\Alice-12-5.7-true", out);
+}
+
+test "Env addGlobal args to data with compile" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    try env.addGlobal("greet", greet8_fn);
+
+    var tpl = try env.compile("\\{{ greet('Alice', 12, 5.7, true) }}", null);
     defer tpl.deinit();
 
     const ctx = try vin.valueFrom(alloc, .{});

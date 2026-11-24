@@ -138,12 +138,14 @@ pub const Environment = struct {
     global_values: std.StringHashMapUnmanaged(Value) = .empty,
     methods: std.StringHashMapUnmanaged(MethodFn) = .empty,
     tags: std.StringHashMapUnmanaged(TagFn) = .empty,
+    /// Cache parse template
+    template_caches: std.StringHashMapUnmanaged(Template) = .empty,
     /// Optional; without one, any composition tag is `error.NoLoader`.
     loader: ?Loader = null,
 
     const Self = @This();
 
-    pub fn init(gpa: Allocator, options: Options) error{OutOfMemory}!Environment {
+    pub fn init(gpa: Allocator, options: Options) error{OutOfMemory}!Self {
         return initWithLoader(gpa, options, null);
     }
 
@@ -154,8 +156,8 @@ pub const Environment = struct {
         gpa: Allocator,
         options: Options,
         template_loader: ?Loader,
-    ) error{OutOfMemory}!Environment {
-        var env: Environment = .{ .gpa = gpa, .options = options, .loader = template_loader };
+    ) error{OutOfMemory}!Self {
+        var env: Self = .{ .gpa = gpa, .options = options, .loader = template_loader };
         errdefer env.deinit();
 
         for (defaults.builtin_filters) |e| {
@@ -177,7 +179,7 @@ pub const Environment = struct {
         return env;
     }
 
-    pub fn deinit(self: *Environment) void {
+    pub fn deinit(self: *Self) void {
         self.filters.deinit(self.gpa);
         self.tests.deinit(self.gpa);
         self.globals.deinit(self.gpa);
@@ -187,68 +189,68 @@ pub const Environment = struct {
         self.* = undefined;
     }
 
-    pub fn withLoader(self: *Environment, template_loader: Loader) void {
+    pub fn withLoader(self: *Self, template_loader: Loader) void {
         self.loader = template_loader;
     }
 
     // when need io, this must set.
-    pub fn withIo(self: *Environment, io: Io) void {
+    pub fn withIo(self: *Self, io: Io) void {
         self.io = io;
     }
 
     /// Register (or replace) a filter. `name` is borrowed and must outlive the
     /// environment.
-    pub fn addFilter(self: *Environment, name: []const u8, func: FilterFn) error{OutOfMemory}!void {
+    pub fn addFilter(self: *Self, name: []const u8, func: FilterFn) error{OutOfMemory}!void {
         try self.filters.put(self.gpa, name, func);
     }
 
-    pub fn addTest(self: *Environment, name: []const u8, func: TestFn) error{OutOfMemory}!void {
+    pub fn addTest(self: *Self, name: []const u8, func: TestFn) error{OutOfMemory}!void {
         try self.tests.put(self.gpa, name, func);
     }
 
     /// Register (or replace) a global function. `name` is borrowed and must
     /// outlive the environment.
-    pub fn addGlobal(self: *Environment, name: []const u8, func: GlobalFn) error{OutOfMemory}!void {
+    pub fn addGlobal(self: *Self, name: []const u8, func: GlobalFn) error{OutOfMemory}!void {
         try self.globals.put(self.gpa, name, func);
     }
 
-    pub fn addGlobalValue(self: *Environment, name: []const u8, val: Value) error{OutOfMemory}!void {
+    pub fn addGlobalValue(self: *Self, name: []const u8, val: Value) error{OutOfMemory}!void {
         try self.global_values.put(self.gpa, name, val);
     }
 
-    pub fn addMethod(self: *Environment, name: []const u8, func: MethodFn) error{OutOfMemory}!void {
+    pub fn addMethod(self: *Self, name: []const u8, func: MethodFn) error{OutOfMemory}!void {
         try self.methods.put(self.gpa, name, func);
     }
 
-    pub fn addTag(self: *Environment, name: []const u8, func: TagFn) error{OutOfMemory}!void {
+    pub fn addTag(self: *Self, name: []const u8, func: TagFn) error{OutOfMemory}!void {
         try self.tags.put(self.gpa, name, func);
     }
 
-    pub fn addFunction(self: *Environment, name: []const u8, func: FunctionFn) error{OutOfMemory}!void {
+    pub fn addFunction(self: *Self, name: []const u8, func: FunctionFn) error{OutOfMemory}!void {
         try self.addGlobalValue(name, .{ .caller = .{ .call = func } });
     }
 
-    pub fn banFilter(self: *Environment, name: []const u8) bool {
+    pub fn banFilter(self: *Self, name: []const u8) bool {
         return self.filters.remove(name);
     }
 
-    pub fn banTest(self: *Environment, name: []const u8) bool {
+    pub fn banTest(self: *Self, name: []const u8) bool {
         return self.tests.remove(name);
     }
 
-    pub fn banGlobal(self: *Environment, name: []const u8) bool {
+    pub fn banGlobal(self: *Self, name: []const u8) bool {
         return self.globals.remove(name);
     }
 
-    pub fn banGlobalValue(self: *Environment, name: []const u8) bool {
+    pub fn banGlobalValue(self: *Self, name: []const u8) bool {
         return self.global_values.remove(name);
     }
 
-    pub fn banMethod(self: *Environment, name: []const u8) bool {
+    pub fn banMethod(self: *Self, name: []const u8) bool {
         return self.methods.remove(name);
     }
 
-    pub fn banTag(self: *Environment, name: []const u8) bool {
+    pub fn banTag(self: *Self, name: []const u8) bool {
         return self.tags.remove(name);
     }
 
@@ -256,7 +258,7 @@ pub const Environment = struct {
     /// source, so `source` need not outlive the call. `diag` (optional) is
     /// filled in on `error.TemplateSyntaxError`.
     pub fn parse(
-        self: *const Environment,
+        self: *const Self,
         source: []const u8,
         diag: ?*Diagnostic,
     ) CompileError!Template {
@@ -296,8 +298,16 @@ pub const Environment = struct {
         };
     }
 
+    pub fn compile(
+        self: *const Self,
+        source: []const u8,
+        diag: ?*Diagnostic,
+    ) CompileError!Template {
+        return self.parse(source, diag);
+    }
+
     pub fn fromString(
-        self: *const Environment,
+        self: *const Self,
         source: []const u8,
         diag: ?*Diagnostic,
     ) CompileError!Template {
@@ -306,7 +316,7 @@ pub const Environment = struct {
 
     /// Compile and render in one step, for the one-shot case.
     pub fn execute(
-        self: *const Environment,
+        self: *const Self,
         source: []const u8,
         context: Value,
         diag: ?*Diagnostic,
@@ -344,10 +354,29 @@ pub const Environment = struct {
 
     pub fn fromFile(
         self: *const Self,
-        file: []const u8,
+        filename: []const u8,
         diag: ?*Diagnostic,
     ) !Template {
-        return self.getTemplate(file, diag);
+        return self.getTemplate(filename, diag);
+    }
+
+    pub fn fromCache(
+        self: *Self,
+        filename: []const u8,
+        diag: ?*Diagnostic,
+    ) !Template {
+        if (self.template_caches.get(filename)) |t| {
+            return t;
+        }
+
+        const t = try self.getTemplate(filename, diag);
+        try self.template_caches.put(self.gpa, filename, t);
+
+        return t;
+    }
+
+    pub fn cleanCache(self: *Self) void {
+        self.template_caches.clearAndFree(self.gpa);
     }
 
     pub fn render(
