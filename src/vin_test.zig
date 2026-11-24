@@ -788,9 +788,6 @@ test "Env addTag fail 3" {
 
     try env.addTag("addstrings", tag_addstrings_fn2);
 
-    var diag: vin.Diagnostic = .{};
-    env.withDiag(&diag);
-
     var tpl = try env.parse("<>{% addstrings title %}123{% endaddstrings %}");
     defer tpl.deinit();
 
@@ -1709,9 +1706,6 @@ test "render with data" {
             .name2 = "test-name",
         });
 
-        var diag: vin.Diagnostic = .{};
-        env.withDiag(&diag);
-
         const out = env.render("renders/tpl6", ctx);
 
         try testing.expectError(error.UndefinedValue, out);
@@ -2362,9 +2356,6 @@ test "env getTemplate and fromFile" {
     {
         var env2 = try vin.Environment.initWithLoader(alloc, .{}, map.loader());
         defer env2.deinit();
-
-        var diag: vin.Diagnostic = .{};
-        env2.withDiag(&diag);
 
         const tpl = env2.fromFile("child2");
 

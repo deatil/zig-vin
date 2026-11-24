@@ -111,6 +111,7 @@ pub const AstError = ast.Error;
 pub const ArgsError = args.Error;
 pub const CompileError = parser.Error;
 pub const RenderError = renders.Error;
+pub const VinError = errors.VinError;
 pub const Error = AstError || CompileError || RenderError;
 
 pub const Ctx = args.Ctx;
@@ -125,6 +126,8 @@ pub const FunctionFn = args.FunctionFn;
 pub const TagFn = parser.TagFn;
 
 const defaults = @import("defaults.zig");
+
+var diagn: Diagnostic = .{};
 
 /// Owns the filter and test registries and the syntax options. Compiling a
 /// template resolves every filter and test name against this environment, so
@@ -147,14 +150,14 @@ pub const Environment = struct {
 
     const Self = @This();
 
-    pub fn init(gpa: Allocator, options: Options) errors.VinError!Self {
+    pub fn init(gpa: Allocator, options: Options) VinError!Self {
         return initWithLoader(gpa, options, null);
     }
 
     /// As `init`, with the loader that `{% extends %}`, `{% include %}` and
     /// `{% import %}` will use. The loader is borrowed and must outlive the
     /// environment.
-    pub fn initWithLoader(gpa: Allocator, options: Options, template_loader: ?Loader) errors.VinError!Self {
+    pub fn initWithLoader(gpa: Allocator, options: Options, template_loader: ?Loader) VinError!Self {
         var env: Self = .{ .gpa = gpa, .options = options, .loader = template_loader };
         errdefer env.deinit();
 
@@ -173,6 +176,8 @@ pub const Environment = struct {
         for (defaults.builtin_tags) |e| {
             try env.tags.put(gpa, e.name, e.func);
         }
+
+        env.diag = &diagn;
 
         return env;
     }
@@ -211,33 +216,33 @@ pub const Environment = struct {
 
     /// Register (or replace) a filter. `name` is borrowed and must outlive the
     /// environment.
-    pub fn addFilter(self: *Self, name: []const u8, func: FilterFn) errors.VinError!void {
+    pub fn addFilter(self: *Self, name: []const u8, func: FilterFn) VinError!void {
         try self.filters.put(self.gpa, name, func);
     }
 
-    pub fn addTest(self: *Self, name: []const u8, func: TestFn) errors.VinError!void {
+    pub fn addTest(self: *Self, name: []const u8, func: TestFn) VinError!void {
         try self.tests.put(self.gpa, name, func);
     }
 
     /// Register (or replace) a global function. `name` is borrowed and must
     /// outlive the environment.
-    pub fn addGlobal(self: *Self, name: []const u8, func: GlobalFn) errors.VinError!void {
+    pub fn addGlobal(self: *Self, name: []const u8, func: GlobalFn) VinError!void {
         try self.globals.put(self.gpa, name, func);
     }
 
-    pub fn addGlobalValue(self: *Self, name: []const u8, val: Value) errors.VinError!void {
+    pub fn addGlobalValue(self: *Self, name: []const u8, val: Value) VinError!void {
         try self.global_values.put(self.gpa, name, val);
     }
 
-    pub fn addMethod(self: *Self, name: []const u8, func: MethodFn) errors.VinError!void {
+    pub fn addMethod(self: *Self, name: []const u8, func: MethodFn) VinError!void {
         try self.methods.put(self.gpa, name, func);
     }
 
-    pub fn addTag(self: *Self, name: []const u8, func: TagFn) errors.VinError!void {
+    pub fn addTag(self: *Self, name: []const u8, func: TagFn) VinError!void {
         try self.tags.put(self.gpa, name, func);
     }
 
-    pub fn addFunction(self: *Self, name: []const u8, func: FunctionFn) errors.VinError!void {
+    pub fn addFunction(self: *Self, name: []const u8, func: FunctionFn) VinError!void {
         try self.addGlobalValue(name, .{ .caller = .{ .call = func } });
     }
 
