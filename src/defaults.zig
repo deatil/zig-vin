@@ -2137,11 +2137,6 @@ const Cycler = struct {
 
         var self: *Cycler = @ptrCast(@alignCast(ctx));
 
-        if (mem.eql(u8, method, "reset")) {
-            self.pos = 0;
-            return .empty_string;
-        }
-
         if (mem.eql(u8, method, "current")) {
             return self.items[self.pos];
         }
@@ -2152,7 +2147,24 @@ const Cycler = struct {
             return rv;
         }
 
+        if (mem.eql(u8, method, "reset")) {
+            self.pos = 0;
+            return .empty_string;
+        }
+
         return error.InvalidMethod;
+    }
+
+    pub fn getAttr(ctx: *anyopaque, fctx: *Ctx, name: []const u8) Error!Value {
+        _ = fctx;
+
+        const self: *Cycler = @ptrCast(@alignCast(ctx));
+
+        if (mem.eql(u8, name, "current")) {
+            return self.items[self.pos];
+        }
+
+        return error.BadArgument;
     }
 };
 
@@ -2170,6 +2182,7 @@ fn gCycler(ctx: *Ctx, args: Args) Error!Value {
     return .fromCallable(.{
         .ctx = cycler_ptr,
         .callMethod = Cycler.callFn,
+        .getAttr = Cycler.getAttr,
     });
 }
 

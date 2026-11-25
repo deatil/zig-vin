@@ -58,54 +58,11 @@ pub const MapLoader = loaders.MapLoader;
 pub const DynMapLoader = loaders.DynMapLoader;
 pub const DirLoader = loaders.DirLoader;
 pub const MultiLoader = loaders.MultiLoader;
-
 pub const LoaderError = loaders.Error;
 /// The lexical half of `DirLoader`'s containment, exported so a caller writing
 /// its own filesystem loader can reuse exactly the same rules.
 pub const checkTemplateName = loaders.checkName;
 pub const UndefinedPolicy = renders.UndefinedPolicy;
-
-pub const Options = struct {
-    autoescape: bool = false,
-    undefined_policy: UndefinedPolicy = .strict,
-    trim_blocks: bool = false,
-    lstrip_blocks: bool = false,
-    keep_trailing_newline: bool = false,
-    /// Optional custom tag delimiters.
-    /// Defaults remain: {{ }}, {% %}, {# #}
-    delimiters: Delimiters = .{},
-    max_output_bytes: usize = 64 << 20,
-    /// Total bytes one render may take from its scratch arena.
-    ///
-    /// The depth caps below bound DEPTH; the per-operation caps in `value.zig`
-    /// (`max_alloc`, `max_items`) bound ONE operation. Neither bounds a
-    /// render's total work, and the arena is not reclaimed until the render
-    /// ends, so both compose into an unbounded one: `{% macro m(n) %}…{{ m(n-1) }}{{ m(n-1) }}…`
-    /// at depth 22 — a third of `max_call_depth` — took 3.8 GB and emitted
-    /// **zero bytes**, so `max_output_bytes` never saw one, and
-    /// `{{ ('a' * 30000)|replace('', 'b' * 30000) }}` multiplied two 64 MiB
-    /// caps together from a 53-byte template
-    max_render_bytes: usize = 256 << 20,
-    /// Combined nesting bound for `{% extends %}`/`{% include %}`/
-    /// `{% import %}`. An inheritance *cycle* is caught by name before this
-    /// ever fires; this bounds everything a name check cannot see.
-    max_template_depth: usize = 32,
-    /// Nesting bound for macro calls, `{% call %}` bodies and `loop()`.
-    max_call_depth: usize = 64,
-    /// How many distinct templates one render may load.
-    max_templates: usize = 256,
-    /// Maximum number of iterations for one `{% while %}` tag.
-    max_while_iterations: usize = 1_000_000,
-    /// Bound on how deep one template's syntax may nest: brackets, `not`/unary
-    /// chains, `else` arms, each link of a `1+1+1`/`x|f|g`/`a.b.c` chain, each
-    /// nested block body and each `{% elif %}`. Enforced at compile time, and
-    /// therefore bounding the recursive evaluator too, since it bounds the tree
-    /// the evaluator walks. Without it a template of 8 000 `(` overflows the
-    /// parser's stack, one of 8 000 `|string` overflows the evaluator's, and
-    /// 16 000 nested `{% if %}` overflow the parser's again — a segfault rather
-    /// than an error. See `parser.Limits` for why the default is 256.
-    max_nesting_depth: usize = 256,
-};
 
 pub const AstError = ast.Error;
 pub const ArgsError = args.Error;
@@ -124,6 +81,31 @@ pub const GlobalFn = args.GlobalFn;
 pub const MethodFn = args.MethodFn;
 pub const FunctionFn = args.FunctionFn;
 pub const TagFn = parser.TagFn;
+
+pub const Options = struct {
+    autoescape: bool = false,
+    undefined_policy: UndefinedPolicy = .strict,
+    trim_blocks: bool = false,
+    lstrip_blocks: bool = false,
+    keep_trailing_newline: bool = false,
+    /// Optional custom tag delimiters.
+    /// Defaults remain: {{ }}, {% %}, {# #}
+    delimiters: Delimiters = .{},
+    max_output_bytes: usize = 64 << 20,
+    /// Total bytes one render may take from its scratch arena.
+    max_render_bytes: usize = 256 << 20,
+    /// Combined nesting bound for `{% extends %}`/`{% include %}`/
+    /// `{% import %}`.
+    max_template_depth: usize = 32,
+    /// Nesting bound for macro calls, `{% call %}` bodies and `loop()`.
+    max_call_depth: usize = 64,
+    /// How many distinct templates one render may load.
+    max_templates: usize = 256,
+    /// Maximum number of iterations for one `{% while %}` tag.
+    max_while_iterations: usize = 1_000_000,
+    /// Bound on how deep one template's syntax may nest: brackets.
+    max_nesting_depth: usize = 256,
+};
 
 const defaults = @import("defaults.zig");
 
