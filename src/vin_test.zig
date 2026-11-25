@@ -627,6 +627,7 @@ fn tag_addstrings_fn(parser: *vin.Parser, rest: []const vin.Token, line: usize, 
     def.* = .{
         .ctx = &h,
         .renderFn = TestH.test_fn,
+        .name = "addstrings",
         .line = line,
     };
 
@@ -745,6 +746,7 @@ fn tag_addstrings_fn2(parser: *vin.Parser, rest: []const vin.Token, line: usize,
     def.* = .{
         .ctx = &h,
         .renderFn = TestH2.test_fn,
+        .name = "addstrings",
         .line = line,
     };
 
@@ -775,7 +777,7 @@ test "Env addTag fail 2" {
     try testing.expectError(error.TemplateSyntaxError, out);
 
     const msg = try alloc.print("{f}", .{diag});
-    try testing.expectEqualStrings("line 1: invalid tag", msg);
+    try testing.expectEqualStrings("line 1: invalid tag `addstrings`", msg);
 }
 
 test "Env addTag fail 3" {
@@ -798,8 +800,8 @@ test "Env addTag fail 3" {
 
     try testing.expectError(error.TemplateSyntaxError, out);
 
-    const msg = try env.getError();
-    try testing.expectEqualStrings("line 1: invalid tag", msg);
+    const msg = try tpl.getError();
+    try testing.expectEqualStrings("line 1: invalid tag `addstrings`", msg);
 }
 
 test "Value is and to" {

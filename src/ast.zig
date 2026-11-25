@@ -240,6 +240,7 @@ pub const CallBlock = struct {
 pub const Generic = struct {
     ctx: *anyopaque,
     renderFn: *const fn (ctx: *anyopaque, render: *anyopaque) Error![]const Node,
+    name: []const u8 = "tagname",
     line: usize,
 };
 

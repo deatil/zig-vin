@@ -2628,6 +2628,7 @@ fn tagIncrement(
     def.* = .{
         .ctx = ctx,
         .renderFn = IncrementCtx.renderFn,
+        .name = "increment",
         .line = line,
     };
 
@@ -2680,6 +2681,7 @@ fn tagDecrement(
     def.* = .{
         .ctx = ctx,
         .renderFn = DecrementCtx.renderFn,
+        .name = "decrement",
         .line = line,
     };
 
@@ -2838,6 +2840,7 @@ fn tagIfChanged(
     def.* = .{
         .ctx = ctx,
         .renderFn = IfChangedCtx.renderFn,
+        .name = "ifchanged",
         .line = line,
     };
 

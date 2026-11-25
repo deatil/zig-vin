@@ -930,7 +930,7 @@ pub const Renderer = struct {
 
     pub fn renderGeneric(self: *Renderer, g: ast.Generic) Error!void {
         const v = g.renderFn(g.ctx, self) catch |err| {
-            return self.fail(g.line, "invalid tag", .{}, err);
+            return self.fail(g.line, "invalid tag `{s}`", .{g.name}, err);
         };
         try self.renderNodes(v);
     }
