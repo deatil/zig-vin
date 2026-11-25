@@ -32,6 +32,8 @@ pub const Array = value.Array;
 pub const Callable = value.Callable;
 pub const Undefined = value.Undefined;
 
+pub const valueNone = value.none;
+pub const valueUndef = value.undef;
 pub const valueBool = value.booler;
 pub const valueInt = value.int;
 pub const valueFloat = value.floater;

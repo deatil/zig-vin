@@ -2280,6 +2280,8 @@ test "value any set" {
     try ns.set(alloc, "arr", .fromString("uuu"));
     try ns.set(alloc, "arr2", vin.valueString("<ytr35"));
     try ns.set(alloc, "arr3", vin.valueMarkup("<ytr35>"));
+    try ns.set(alloc, "none", vin.valueNone());
+    try ns.set(alloc, "undef", vin.valueUndef("<ytr35>"));
 
     var dict = try vin.valueDict(alloc);
     try dict.set("arr", try array.asValue());
@@ -2297,7 +2299,7 @@ test "value any set" {
     const ctx = try dict.asValue();
     const out = try tpl.render(ctx);
 
-    try testing.expectEqualStrings("['uu']|('uu',)|('jkl', 'qqw89', 'ytr35')|[True, 25, 3.25, 'ytr35', '<ytr35', '<ytr35>']|{'lo': 'kkk'}|{'arr': 'uuu', 'arr2': '<ytr35', 'arr3': '<ytr35>'}|uuu|<ytr35|<ytr35>", out);
+    try testing.expectEqualStrings("['uu']|('uu',)|('jkl', 'qqw89', 'ytr35')|[True, 25, 3.25, 'ytr35', '<ytr35', '<ytr35>']|{'lo': 'kkk'}|{'arr': 'uuu', 'arr2': '<ytr35', 'arr3': '<ytr35>', 'none': None, 'undef': }|uuu|<ytr35|<ytr35>", out);
 }
 
 test "env getTemplate and fromFile" {

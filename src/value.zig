@@ -536,6 +536,14 @@ pub const Value = union(enum) {
     }
 };
 
+pub fn none() Value {
+    return .none;
+}
+
+pub fn undef(name: []const u8) Value {
+    return .fromUndef(name);
+}
+
 pub fn booler(boolean: bool) Value {
     return .fromBool(boolean);
 }
@@ -548,8 +556,8 @@ pub fn floater(float: f64) Value {
     return .fromFloat(float);
 }
 
-pub fn string(bytes: []const u8) Value {
-    return .fromString(bytes);
+pub fn string(str: []const u8) Value {
+    return .fromString(str);
 }
 
 pub fn markup(bytes: []const u8) Value {
