@@ -930,6 +930,10 @@ pub const Renderer = struct {
 
     pub fn renderGeneric(self: *Renderer, g: ast.Generic) Error!void {
         const v = g.renderFn(g.ctx, self) catch |err| {
+            if (self.diag.len > 0) {
+                const msg = try self.arena.dupe(u8, self.diag.message());
+                return self.fail(g.line, "invalid tag `{s}`: {s}", .{ g.name, msg }, err);
+            }
             return self.fail(g.line, "invalid tag `{s}`", .{g.name}, err);
         };
         try self.renderNodes(v);

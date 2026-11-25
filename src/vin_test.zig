@@ -673,7 +673,7 @@ test "Env addTag fail" {
     try testing.expectError(error.TemplateSyntaxError, tpl);
 
     const msg = try alloc.print("{f}", .{diag});
-    try testing.expectEqualStrings("line 1: invalid tag `addstrings`", msg);
+    try testing.expectEqualStrings("line 1: invalid tag `addstrings`: unknown tag `endaddstring`", msg);
 }
 
 test "Env unknown tag fail" {
@@ -727,7 +727,7 @@ const TestH2 = struct {
         _ = ctx;
         _ = render;
 
-        return vin.AstError.TemplateSyntaxError;
+        return error.TemplateSyntaxError;
     }
 };
 
@@ -801,7 +801,7 @@ test "Env addTag fail 3" {
     try testing.expectError(error.TemplateSyntaxError, out);
 
     const msg = try tpl.getError();
-    try testing.expectEqualStrings("line 1: invalid tag `addstrings`", msg);
+    try testing.expectEqualStrings("line 1: invalid tag `addstrings`: in template 'b': template nesting deeper than 32", msg);
 }
 
 test "Value is and to" {

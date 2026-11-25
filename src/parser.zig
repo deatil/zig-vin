@@ -191,6 +191,10 @@ pub const Parser = struct {
 
         if (self.registry.tag(self.registry.ctx, kw.text)) |fn_ptr| {
             return fn_ptr(self, rest, line, out) catch {
+                if (self.diag.len > 0) {
+                    const msg = try self.arena.dupe(u8, self.diag.message());
+                    return self.fail(line, "invalid tag `{s}`: {s}", .{ kw.text, msg });
+                }
                 return self.fail(line, "invalid tag `{s}`", .{kw.text});
             };
         }
