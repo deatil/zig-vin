@@ -202,14 +202,6 @@ pub const Undefined = struct {
 
 /// A macro — a `{% macro %}`, or the body a `{% call %}` block hands to
 /// `caller()` — closed over the scope it was defined in.
-///
-/// The payload is **opaque here on purpose**. A macro necessarily refers to
-/// syntax (`ast`) and to live scopes (`render`), and both of those sit above
-/// this file in the import graph; making `Value` name them would put a cycle at
-/// the very bottom of the module. `render.zig` allocates the implementation and
-/// owns the only casts of `impl`, so the unsafety is one file wide. `name` is
-/// carried in the clear because `repr()` and `macro.name` need it without a
-/// cast.
 pub const MacroRef = struct {
     name: []const u8,
     impl: *const anyopaque,

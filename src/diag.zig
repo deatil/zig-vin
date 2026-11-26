@@ -2,6 +2,7 @@ const std = @import("std");
 const Writer = std.Io.Writer;
 
 pub const Diagnostic = struct {
+    filename: []const u8 = "",
     /// 1-based line in the template source; 0 when unknown.
     line: usize = 0,
     buf: [512]u8 = undefined,
@@ -21,7 +22,15 @@ pub const Diagnostic = struct {
         self.len = s.len;
     }
 
+    pub fn setFilename(self: *Diagnostic, filename: []const u8) void {
+        self.filename = filename;
+    }
+
     pub fn format(self: *const Diagnostic, writer: *Writer) Writer.Error!void {
+        if (self.filename.len > 0) {
+            try writer.print("line {d}: in template '{s}': {s}", .{ self.line, self.filename, self.message() });
+        }
+
         try writer.print("line {d}: {s}", .{ self.line, self.message() });
     }
 };

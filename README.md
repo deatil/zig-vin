@@ -85,7 +85,7 @@ pub fn main(init: std.process.Init) !void {
     var diag: vin.Diagnostic = .{};
     env.withDiag(&diag);
 
-    const out = try env.execute(tpl, ctx) catch {
+    const out = env.execute(tpl, ctx) catch {
         const err_msg = try alloc.print("{f}", .{diag});
         std.debug.print("error: {s} \n", .{err_msg});
         return;
@@ -136,7 +136,7 @@ pub fn main(init: std.process.Init) !void {
     var diag: vin.Diagnostic = .{};
     env.withDiag(&diag);
 
-    const out = try env.render(tpl, ctx) catch {
+    const out = env.render(tpl, ctx) catch {
         const err_msg = try alloc.print("{f}", .{diag});
         std.debug.print("error: {s} \n", .{err_msg});
         return;
