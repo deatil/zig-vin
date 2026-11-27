@@ -3267,10 +3267,10 @@
     "keep_trailing_newline": false,
     "lstrip_blocks": false,
     "name": "filesizeformat_2",
-    "out": "1023\\u00a0bytes,1.0\\u00a0KB,1.0\\u00a0KB,1.0\\u00a0MB",
+    "out": "1023\\u00a0bytes,1.1\\u00a0KB,1.0\\u00a0KB,1.0\\u00a0MB",
     "status": "ok",
     "strict": false,
-    "template": "{{ 1023|filesizeformat }},{{ 1024|filesizeformat }},{{ 1025|filesizeformat }},{{ 1048577|filesizeformat }}",
+    "template": "{{ 1023|filesizeformat }},{{ 1124|filesizeformat }},{{ 1025|filesizeformat }},{{ 1048577|filesizeformat }}",
     "templates": {},
     "trim_blocks": false
   },
@@ -3285,6 +3285,20 @@
     "status": "ok",
     "strict": false,
     "template": "{{ 1073741825|filesizeformat }},{{ 1099511627778|filesizeformat }},{{ 1125899906842625|filesizeformat }}",
+    "templates": {},
+    "trim_blocks": false
+  },
+  {
+    "autoescape": false,
+    "context": "{}",
+    "expect_error": false,
+    "keep_trailing_newline": false,
+    "lstrip_blocks": false,
+    "name": "view_format",
+    "out": "567,1.1K,10.2M,10.2B,10.2T",
+    "status": "ok",
+    "strict": false,
+    "template": "{{ 567|view_format }},{{ 1124|view_format }},{{ 10229076|view_format }},{{ 10229076000|view_format }},{{ 10229076000000|view_format }}",
     "templates": {},
     "trim_blocks": false
   },

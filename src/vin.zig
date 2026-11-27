@@ -109,7 +109,7 @@ pub const Options = struct {
     max_nesting_depth: usize = 256,
 };
 
-const defaults = @import("defaults.zig");
+const builtin = @import("builtin.zig");
 
 var diagn: Diagnostic = .{};
 
@@ -145,19 +145,19 @@ pub const Environment = struct {
         var env: Self = .{ .gpa = gpa, .options = options, .loader = template_loader };
         errdefer env.deinit();
 
-        for (defaults.builtin_filters) |e| {
+        for (builtin.builtin_filters) |e| {
             try env.filters.put(gpa, e.name, e.func);
         }
-        for (defaults.builtin_tests) |e| {
+        for (builtin.builtin_tests) |e| {
             try env.tests.put(gpa, e.name, e.func);
         }
-        for (defaults.builtin_globals) |e| {
+        for (builtin.builtin_globals) |e| {
             try env.globals.put(gpa, e.name, e.func);
         }
-        for (defaults.builtin_methods) |e| {
+        for (builtin.builtin_methods) |e| {
             try env.methods.put(gpa, e.name, e.func);
         }
-        for (defaults.builtin_tags) |e| {
+        for (builtin.builtin_tags) |e| {
             try env.tags.put(gpa, e.name, e.func);
         }
 
@@ -317,7 +317,7 @@ pub const Environment = struct {
 
         if (self.loader) |loader| {
             const source = loader.load(loader.ctx, self.gpa, tpl) catch |err| {
-                d.set(0, "Template '{s}' load fail", .{tpl});
+                d.with(0, "Template '{s}' load fail", .{tpl});
                 return err;
             };
 
@@ -328,7 +328,7 @@ pub const Environment = struct {
             }
         }
 
-        d.set(0, "Template '{s}' not found", .{tpl});
+        d.with(0, "Template '{s}' not found", .{tpl});
         return error.LoaderInvalid;
     }
 
@@ -533,7 +533,7 @@ pub const Template = struct {
             // to the caller would be the same misclassification a real OOM is
             // not: the machine has memory, this render asked for too much.
             if (e == error.OutOfMemory and budget.exhausted) {
-                d.set(0, "render exceeded max_render_bytes ({d})", .{self.env.options.max_render_bytes});
+                d.with(0, "render exceeded max_render_bytes ({d})", .{self.env.options.max_render_bytes});
                 return error.RenderBudgetExceeded;
             }
             return e;

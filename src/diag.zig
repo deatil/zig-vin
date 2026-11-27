@@ -7,23 +7,40 @@ pub const Diagnostic = struct {
     line: usize = 0,
     buf: [512]u8 = undefined,
     len: usize = 0,
+    /// if stop is true, the set wiil return
+    stop: bool = false,
 
-    pub fn message(self: *const Diagnostic) []const u8 {
-        const len: usize = if (self.len < 512) self.len else 511;
-        return self.buf[0..len];
+    pub fn withFilename(self: *Diagnostic, filename: []const u8) void {
+        self.filename = filename;
     }
 
-    pub fn set(self: *Diagnostic, line: usize, comptime fmt: []const u8, args: anytype) void {
+    pub fn with(self: *Diagnostic, line: usize, comptime fmt: []const u8, args: anytype) void {
         self.line = line;
         const s = std.fmt.bufPrint(&self.buf, fmt, args) catch blk: {
-            // Truncation is fine; losing the diagnostic entirely is not.
             break :blk self.buf[0..self.buf.len];
         };
         self.len = s.len;
     }
 
     pub fn setFilename(self: *Diagnostic, filename: []const u8) void {
+        if (self.stop) return;
         self.filename = filename;
+    }
+
+    pub fn set(self: *Diagnostic, line: usize, comptime fmt: []const u8, args: anytype) void {
+        if (self.stop) return;
+
+        self.line = line;
+        const s = std.fmt.bufPrint(&self.buf, fmt, args) catch blk: {
+            break :blk self.buf[0..self.buf.len];
+        };
+        self.len = s.len;
+        self.stop = true;
+    }
+
+    pub fn message(self: *const Diagnostic) []const u8 {
+        const len: usize = if (self.len < 512) self.len else 511;
+        return self.buf[0..len];
     }
 
     pub fn format(self: *const Diagnostic, writer: *Writer) Writer.Error!void {

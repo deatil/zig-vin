@@ -211,7 +211,7 @@ pub const Renderer = struct {
     block_call_stack: std.ArrayList([]const u8) = .empty,
 
     pub fn fail(self: *Renderer, line: usize, comptime fmt: []const u8, args: anytype, e: Error) Error {
-        self.diag.set(line, fmt, args);
+        self.diag.with(line, fmt, args);
         return e;
     }
 
@@ -220,7 +220,8 @@ pub const Renderer = struct {
         if (mem.startsWith(u8, info, "in template")) return err;
 
         const msg = try self.arena.dupe(u8, info);
-        return self.fail(self.diag.line, "in template '{s}': {s}", .{ template_name, msg }, err);
+        self.diag.with(self.diag.line, "in template '{s}': {s}", .{ template_name, msg });
+        return err;
     }
 
     pub fn newFrame(self: *Renderer) Error!*Frame {
@@ -1273,7 +1274,7 @@ pub const Renderer = struct {
     }
 
     pub fn opError(self: *Renderer, line: usize, err: Error) Error {
-        if (self.diag.len == 0) self.diag.set(line, "{s}", .{@errorName(err)});
+        if (self.diag.len == 0) self.diag.with(line, "{s}", .{@errorName(err)});
         return err;
     }
 
@@ -1327,7 +1328,7 @@ pub const Renderer = struct {
             return self.fail(line, "unknown filter '{s}'", .{name}, error.UnknownFilter);
         var ctx = self.useCtx();
         return fn_ptr(&ctx, input, args) catch |err| {
-            if (self.diag.len == 0) self.diag.set(line, "filter '{s}': {s}", .{ name, @errorName(err) });
+            if (self.diag.len == 0) self.diag.with(line, "filter '{s}': {s}", .{ name, @errorName(err) });
             return err;
         };
     }

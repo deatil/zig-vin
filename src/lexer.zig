@@ -147,7 +147,7 @@ const Lexer = struct {
     marks: std.ArrayList(Mark) = .empty,
 
     fn fail(self: *Lexer, comptime msg: []const u8) Error {
-        self.diag.set(self.line, "{s}", .{msg});
+        self.diag.with(self.line, "{s}", .{msg});
         return error.TemplateSyntaxError;
     }
 

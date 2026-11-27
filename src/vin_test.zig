@@ -501,7 +501,7 @@ fn addString_fn2(ctx: *vin.Ctx, input: vin.Value, args: vin.Args) vin.ArgsError!
     const in = ctx.toStr(input) catch return error.BadArgument;
 
     if (!std.mem.eql(u8, in, "cycle")) {
-        ctx.diag.set(0, "input error: {s}", .{in});
+        ctx.diag.with(0, "input error: {s}", .{in});
         return error.DiagInvalidTemplateSyntax;
     }
 

@@ -1192,8 +1192,9 @@ fn fYesno(ctx: *Ctx, input: Value, args: Args) Error!Value {
 }
 
 fn fFilesizeformat(ctx: *Ctx, input: Value, args: Args) Error!Value {
-    const arena = ctx.arena;
     _ = args;
+
+    const arena = ctx.arena;
 
     var bytes = input.toInt() orelse 0;
 
@@ -1208,7 +1209,7 @@ fn fFilesizeformat(ctx: *Ctx, input: Value, args: Args) Error!Value {
     var unit_idx: usize = 0;
 
     while (size >= 1024 and (unit_idx < units.len - 1)) {
-        size = @divTrunc(size, 1024);
+        size = size / 1024;
         unit_idx += 1;
     }
 
@@ -1897,6 +1898,41 @@ fn fTruncatewords(ctx: *Ctx, input: Value, args: Args) Error!Value {
     };
 }
 
+fn fViewformat(ctx: *Ctx, input: Value, args: Args) Error!Value {
+    const arena = ctx.arena;
+    _ = args;
+
+    var views = input.toInt() orelse 0;
+
+    const negative = if (views < 0) true else false;
+    if (negative) {
+        views = -views;
+    }
+
+    var size: f64 = @floatFromInt(views);
+
+    const units: [4][]const u8 = .{ "K", "M", "B", "T" };
+    var unit_idx: usize = 0;
+
+    while (size >= 1000 and (unit_idx < units.len)) {
+        size = size / 1000;
+        unit_idx += 1;
+   }
+
+    var result: []const u8 = undefined;
+    if (unit_idx == 0) {
+        result = try arena.print("{d}", .{ views });
+    } else {
+        result = try arena.print("{:.1}{s}", .{ size, units[unit_idx-1] });
+    }
+
+    if (negative) {
+        result = try arena.print("-{s}", .{result});
+    }
+
+    return .fromString(result);
+}
+
 pub const builtin_filters = [_]FilterEntry{
     .{ .name = "abs", .func = fAbs },
     .{ .name = "batch", .func = fBatch },
@@ -1960,6 +1996,7 @@ pub const builtin_filters = [_]FilterEntry{
     .{ .name = "strip_html", .func = fStripHtml },
     .{ .name = "strip_newlines", .func = fStripNewlines },
     .{ .name = "truncatewords", .func = fTruncatewords },
+    .{ .name = "view_format", .func = fViewformat },
 };
 
 // tests

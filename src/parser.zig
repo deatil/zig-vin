@@ -99,12 +99,12 @@ pub const Parser = struct {
     extends: ?*const Expr = null,
 
     pub fn fail(self: *Parser, line: usize, comptime fmt: []const u8, args: anytype) Error {
-        self.diag.set(line, fmt, args);
+        self.diag.with(line, fmt, args);
         return error.TemplateSyntaxError;
     }
 
     pub fn failAt(self: *Parser, line: usize, msg: []const u8) Error {
-        self.diag.set(line, "{s}", .{msg});
+        self.diag.with(line, "{s}", .{msg});
         return error.TemplateSyntaxError;
     }
 
@@ -119,7 +119,7 @@ pub const Parser = struct {
     /// point: once the stack is gone there is no error left to return.
     pub fn nest(self: *Parser, line: usize) Error!void {
         if (self.depth >= self.limits.max_nesting_depth) {
-            self.diag.set(line, "template nested deeper than {d}", .{self.limits.max_nesting_depth});
+            self.diag.with(line, "template nested deeper than {d}", .{self.limits.max_nesting_depth});
             return error.TooDeep;
         }
         self.depth += 1;
@@ -1456,7 +1456,7 @@ pub const Stream = struct {
             if (mem.eql(u8, name, "None")) {
                 name = "none";
             } else {
-                return self.p.failAt(line, "unknown test — every test name is resolved at compile time (see README's test table)");
+                return self.p.failAt(line, "unknown test — every test name is resolved at compile time");
             }
         }
         var args: ast.Args = .{};
