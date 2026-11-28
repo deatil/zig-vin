@@ -10,6 +10,7 @@ const args_mod = @import("args.zig");
 const lexer = @import("lexer.zig");
 const parsers = @import("parser.zig");
 const renders = @import("render.zig");
+const pprint = @import("pprint.zig");
 
 const Ctx = args_mod.Ctx;
 const Args = args_mod.Args;
@@ -1933,6 +1934,16 @@ fn fViewformat(ctx: *Ctx, input: Value, args: Args) Error!Value {
     return .fromString(result);
 }
 
+fn fPprint(ctx: *Ctx, input: Value, args: Args) Error!Value {
+    const arena = ctx.arena;
+
+    const indent_v = args.get(0, "indent") orelse Value.fromInt(2);
+    const indent: usize = if (indent_v.toInt()) |i| @as(usize, @intCast(i)) else 2;
+
+    const result = try pprint.pformat(arena, input, indent);
+    return .fromString(result);
+}
+
 pub const builtin_filters = [_]FilterEntry{
     .{ .name = "abs", .func = fAbs },
     .{ .name = "batch", .func = fBatch },
@@ -1997,6 +2008,7 @@ pub const builtin_filters = [_]FilterEntry{
     .{ .name = "strip_newlines", .func = fStripNewlines },
     .{ .name = "truncatewords", .func = fTruncatewords },
     .{ .name = "view_format", .func = fViewformat },
+    .{ .name = "pprint", .func = fPprint },
 };
 
 // tests
@@ -2385,12 +2397,125 @@ fn renderIncludedExpression(rd: *renders.Renderer, args: args_mod.Args) renders.
     } };
 }
 
+const genWords = [_][]const u8{
+    "a",          "ac",        "accumsan",     "ad",        "adipiscing",   "aenean",      "aliquam",     "aliquet",   "amet",        "ante",      "aptent",
+    "arcu",       "at",        "auctor",       "augue",     "bibendum",     "blandit",     "class",       "commodo",   "condimentum", "congue",    "consectetuer",
+    "consequat",  "conubia",   "convallis",    "cras",      "cubilia",      "cum",         "curabitur",   "curae",     "cursus",      "dapibus",   "diam",
+    "dictum",     "dictumst",  "dignissim",    "dis",       "dolor",        "donec",       "dui",         "duis",      "egestas",     "eget",      "eleifend",
+    "elementum",  "elit",      "enim",         "erat",      "eros",         "est",         "et",          "etiam",     "eu",          "euismod",   "facilisi",
+    "facilisis",  "fames",     "faucibus",     "felis",     "fermentum",    "feugiat",     "fringilla",   "fusce",     "gravida",     "habitant",  "habitasse",
+    "hac",        "hendrerit", "hymenaeos",    "iaculis",   "id",           "imperdiet",   "in",          "inceptos",  "integer",     "interdum",  "ipsum",
+    "justo",      "lacinia",   "lacus",        "laoreet",   "lectus",       "leo",         "libero",      "ligula",    "litora",      "lobortis",  "lorem",
+    "luctus",     "maecenas",  "magna",        "magnis",    "malesuada",    "massa",       "mattis",      "mauris",    "metus",       "mi",        "molestie",
+    "mollis",     "montes",    "morbi",        "mus",       "nam",          "nascetur",    "natoque",     "nec",       "neque",       "netus",     "nibh",
+    "nisi",       "nisl",      "non",          "nonummy",   "nostra",       "nulla",       "nullam",      "nunc",      "odio",        "orci",      "ornare",
+    "parturient", "pede",      "pellentesque", "penatibus", "per",          "pharetra",    "phasellus",   "placerat",  "platea",      "porta",     "porttitor",
+    "posuere",    "potenti",   "praesent",     "pretium",   "primis",       "proin",       "pulvinar",    "purus",     "quam",        "quis",      "quisque",
+    "rhoncus",    "ridiculus", "risus",        "rutrum",    "sagittis",     "sapien",      "scelerisque", "sed",       "sem",         "semper",    "senectus",
+    "sit",        "sociis",    "sociosqu",     "sodales",   "sollicitudin", "suscipit",    "suspendisse", "taciti",    "tellus",      "tempor",    "tempus",
+    "tincidunt",  "torquent",  "tortor",       "tristique", "turpis",       "ullamcorper", "ultrices",    "ultricies", "urna",        "ut",        "varius",
+    "vehicula",   "vel",       "velit",        "venenatis", "vestibulum",   "vitae",       "vivamus",     "viverra",   "volutpat",    "vulputate",
+};
+
+fn generateWords(arena: Allocator, rng: std.Random, n: usize, html: bool, min: i64, max: i64) Error![]u8 {
+    if (min < 0 or max <= min) return error.BadArgument;
+
+    var out: std.ArrayList(u8) = .empty;
+    for (0..n) |pi| {
+        if (pi != 0) try out.appendSlice(arena, if (html) "\n" else "\n\n");
+        if (html) try out.appendSlice(arena, "<p>");
+
+        var next_capitalized = true;
+        var last_comma: i64 = 0;
+        var last_fullstop: i64 = 0;
+        var last: ?[]const u8 = null;
+
+        const count: i64 = min + @as(i64, @intCast(rng.uintLessThan(u64, @intCast(max - min))));
+
+        var idx: i64 = 0;
+        var first = true;
+        var end_char: u8 = ' ';
+
+        while (idx < count) : (idx += 1) {
+            var word: []const u8 = undefined;
+            while (true) {
+                word = genWords[rng.uintLessThan(usize, genWords.len)];
+                if (last == null or !std.mem.eql(u8, word, last.?)) {
+                    last = word;
+                    break;
+                }
+            }
+
+            if (!first) try out.append(arena, ' ');
+            first = false;
+
+            if (next_capitalized) {
+                try out.append(arena, std.ascii.toUpper(word[0]));
+                try out.appendSlice(arena, word[1..]);
+                next_capitalized = false;
+            } else {
+                try out.appendSlice(arena, word);
+            }
+            end_char = word[word.len - 1];
+
+            if (idx - @as(i64, @intCast(3 + rng.uintLessThan(u64, 5))) > last_comma) {
+                last_comma = idx;
+                last_fullstop += 2;
+                try out.append(arena, ',');
+                end_char = ',';
+            }
+
+            if (idx - @as(i64, @intCast(10 + rng.uintLessThan(u64, 10))) > last_fullstop) {
+                last_comma = idx;
+                last_fullstop = idx;
+                try out.append(arena, '.');
+                end_char = '.';
+                next_capitalized = true;
+            }
+        }
+
+        if (end_char == ',') {
+            out.items[out.items.len - 1] = '.';
+        } else if (end_char != '.') {
+            try out.append(arena, '.');
+        }
+        if (html) try out.appendSlice(arena, "</p>");
+    }
+
+    return out.items;
+}
+
+fn gLipsum(ctx: *Ctx, args: Args) Error!Value {
+    const arena = ctx.arena;
+    const io = ctx.io;
+
+    const n_v = args.get(0, "n") orelse Value.fromInt(1);
+    const n: usize = if (n_v.toInt()) |ni| @as(usize, @intCast(ni)) else 1;
+
+    const html_v = args.byName("html") orelse Value.fromBool(false);
+    const html: bool = if (html_v.toBool()) |b| b else false;
+
+    const min_v = args.byName("min") orelse Value.fromInt(15);
+    const min: i64 = if (min_v.toInt()) |i| i else 15;
+
+    const max_v = args.byName("max") orelse Value.fromInt(30);
+    const max: i64 = if (max_v.toInt()) |i| i else 30;
+
+    var prng = std.Random.IoSource{ .io = io };
+    const random = prng.interface();
+
+    const result = try generateWords(arena, random, n, html, min, max);
+
+    return .fromString(result);
+}
+
 pub const builtin_globals = [_]GlobalEntry{
     .{ .name = "cycler", .func = gCycler },
     .{ .name = "joiner", .func = gJoiner },
     .{ .name = "dict", .func = gDict },
     .{ .name = "namespace", .func = gNamespace },
     .{ .name = "include", .func = gInclude },
+    .{ .name = "lipsum", .func = gLipsum },
 };
 
 // value methods (`s.upper()`, `d.items()`, …)

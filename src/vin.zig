@@ -311,6 +311,10 @@ pub const Environment = struct {
         return tmpl.render(context);
     }
 
+    pub fn renderTemplateString(self: *Self, source: []const u8, context: Value) Error![]u8 {
+        return self.execute(source, context);
+    }
+
     pub fn getTemplate(self: *Self, tpl: []const u8) !Template {
         var scratch: Diagnostic = .{};
         var d = self.diag orelse &scratch;

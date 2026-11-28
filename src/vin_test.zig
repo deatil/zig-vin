@@ -1771,7 +1771,7 @@ test "include and includes are isolated and nested includes work" {
     defer gpa.free(with_slots);
     try testing.expectEqualStrings("<head|x[nested]y>", with_slots);
 
-    const with_slots2 = try env.execute(
+    const with_slots2 = try env.renderTemplateString(
         "{% includes 'modal' %}" ++
             "{% block body %}x" ++
             "{% includes 'inner' %}" ++
@@ -2447,4 +2447,121 @@ test "Env addGlobal args to data with compile" {
     const out = try tpl.render(ctx);
 
     try testing.expectEqualStrings("\\Alice-12-5.7-true", out);
+}
+
+test "lipsum function" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    env.withIo(testing.io);
+
+    {
+        const out = try env.execute("{{ lipsum() }}", .none);
+        try testing.expectEqual(true, out.len > 30);
+    }
+    {
+        const out = try env.execute("{{ lipsum(html=true) }}", .none);
+        try testing.expectEqual(true, std.mem.startsWith(u8, out, "<p>"));
+        try testing.expectEqual(true, std.mem.endsWith(u8, out, "</p>"));
+    }
+    {
+        const out = try env.execute("{{ lipsum(n=3, html=true) }}", .none);
+        try testing.expectEqual(true, (std.mem.find(u8, out, "\n") orelse 0) > 0);
+    }
+}
+
+test "pprint filter" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var env = try vin.Environment.init(alloc, .{});
+    defer env.deinit();
+
+    var array = try vin.valueArray(alloc);
+    try array.append(.fromString("uu"));
+
+    var array2 = try vin.valueArray(alloc);
+    try array2.append(.fromString("jkl"));
+    try array2.append(.fromString("qqw89"));
+    try array2.append(.fromString("ytr35"));
+
+    var array3 = try vin.valueArray(alloc);
+    try array3.append(vin.valueBool(true));
+    try array3.append(vin.valueInt(25));
+    try array3.append(vin.valueFloat(3.25));
+    try array3.append(vin.valueString("ytr35"));
+    try array3.append(vin.valueString("<ytr35"));
+    try array3.append(vin.valueMarkup("<ytr35>"));
+
+    const maps = try vin.valueMaps(alloc, &.{
+        .{ .key = .fromString("lo"), .value = .fromString("kkk") },
+    });
+
+    var dict = try vin.valueDict(alloc);
+    try dict.set("arr", try array.asValue());
+    try dict.set("arr2", try array.asTupleValue());
+    try dict.set("tuple", try array2.asTupleValue());
+    try dict.set("arr3", try array3.asValue());
+    try dict.set("maps", maps.asValue());
+
+    var data = try vin.valueDict(alloc);
+    try data.set("data2", try dict.asValue());
+
+    {
+        const ctx = try data.asValue();
+        const out = try env.renderTemplateString(
+            \\{{ data2|pprint }}
+        , ctx);
+
+        const check = 
+            \\{
+            \\   'arr': ['uu'],
+            \\   'arr2': ('uu',),
+            \\   'arr3': [True, 25, 3.25, 'ytr35', '<ytr35', '<ytr35>'],
+            \\   'maps': {'lo': 'kkk'},
+            \\   'tuple': ('jkl', 'qqw89', 'ytr35')
+            \\}
+        ;
+        try testing.expectEqualStrings(check, out);
+    }
+    {
+        const ctx = try data.asValue();
+        const out = try env.renderTemplateString(
+            \\{{ data2|pprint(1) }}
+        , ctx);
+
+        const check = 
+            \\{
+            \\  'arr': ['uu'],
+            \\  'arr2': ('uu',),
+            \\  'arr3': [True, 25, 3.25, 'ytr35', '<ytr35', '<ytr35>'],
+            \\  'maps': {'lo': 'kkk'},
+            \\  'tuple': ('jkl', 'qqw89', 'ytr35')
+            \\}
+        ;
+        try testing.expectEqualStrings(check, out);
+    }
+    {
+        const ctx = try data.asValue();
+        const out = try env.renderTemplateString(
+            \\{{ data2|pprint(indent=3) }}
+        , ctx);
+
+        const check = 
+            \\{
+            \\    'arr': ['uu'],
+            \\    'arr2': ('uu',),
+            \\    'arr3': [True, 25, 3.25, 'ytr35', '<ytr35', '<ytr35>'],
+            \\    'maps': {'lo': 'kkk'},
+            \\    'tuple': ('jkl', 'qqw89', 'ytr35')
+            \\}
+        ;
+        try testing.expectEqualStrings(check, out);
+    }
+
 }

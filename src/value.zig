@@ -149,8 +149,8 @@ pub const Dict = struct {
 
     pub fn asValue(self: *Dict) !Value {
         const pairs = try self.pairs.clone(self.arena);
-        var ns: Namespace = .{ .pairs = pairs };
-        return .{ .namespace = &ns };
+        const map: Map = .{ .pairs = pairs.items };
+        return .{ .map = map };
     }
 };
 
